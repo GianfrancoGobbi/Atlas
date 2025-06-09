@@ -1,0 +1,6 @@
+{
+  "name": "Atlas",
+  "description": "A web application for managing appointments, profiles, and interactions within a therapeutic consultancy practice. It caters to patients, therapists, and administrators.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
