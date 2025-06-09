@@ -9,6 +9,9 @@ import { NotFoundPage } from '../pages/NotFoundPage';
 import { LandingPage } from '../pages/LandingPage'; // Corrected/Confirmed: Relative path
 // import { AreasPage } from '../pages/AreasPage'; // AreasPage is being removed
 import { AreaDetailPage } from '../pages/AreaDetailPage'; // Import AreaDetailPage
+import { TareasTerapeutasPage } from '../pages/TareasTerapeutasPage'; // Import TareasTerapeutasPage
+import { ObrasSocialesPage } from '../pages/ObrasSocialesPage'; // Import ObrasSocialesPage
+import { FacturacionPage } from '../pages/FacturacionPage'; // Import FacturacionPage
 import { ProtectedRoute } from './ProtectedRoute';
 import { MainLayout } from '../components/layout/MainLayout';
 import { PublicLayout } from '../components/layout/PublicLayout'; // Import PublicLayout
@@ -35,12 +38,21 @@ export const AppRouter: React.FC = () => {
             <Route path="/perfil" element={<ProfilePage />} />
             <Route path="/turnos" element={<AppointmentsPage />} />
             <Route path="/turnos/:turnoId" element={<AppointmentDetailPage />} />
+            
+            {/* Therapist specific routes */}
+            <Route element={<ProtectedRoute allowedRoles={[UserRole.TERAPEUTA, UserRole.ADMIN]} />}> {/* Admin can also access these therapist routes */}
+                <Route path="/tareas-equipo" element={<TareasTerapeutasPage />} />
+                <Route path="/obras-sociales" element={<ObrasSocialesPage />} />
+                <Route path="/facturacion" element={<FacturacionPage />} />
+                {/* 
+                  Example of other role-specific routes:
+                  <Route path="/servicios" element={<ServicesManagementPage />} />
+                  <Route path="/historial-clinico" element={<ClinicalHistoryPage />} />
+                */}
+            </Route>
+            
             {/* 
-              Example of role-specific routes:
-              <Route element={<ProtectedRoute allowedRoles={[UserRole.TERAPEUTA]} />}>
-                <Route path="/servicios" element={<ServicesManagementPage />} />
-                <Route path="/historial-clinico" element={<ClinicalHistoryPage />} />
-              </Route>
+              Admin specific routes (example)
               <Route element={<ProtectedRoute allowedRoles={[UserRole.ADMIN]} />}>
                 <Route path="/admin/usuarios" element={<UserManagementPage />} />
               </Route>

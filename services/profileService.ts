@@ -235,4 +235,20 @@ export const profileService = {
     }
     return rawData ? rawData.map(raw => mapRawProfileToUserProfile(raw)!).filter(Boolean) as UserProfile[] : [];
   },
+
+ getAllTerapeutas: async (): Promise<Pick<UserProfile, 'id' | 'nombre' | 'apellido'>[]> => {
+    const { data: rawData, error }: PostgrestResponse<Pick<RawUserProfile, 'id' | 'nombre' | 'apellido' | 'rol' | 'activo'>> = await supabase
+      .from('usuarios_perfil')
+      .select('id, nombre, apellido, rol, activo')
+      .eq('rol', UserRole.TERAPEUTA)
+      .eq('activo', true)
+      .order('apellido', { ascending: true })
+      .order('nombre', { ascending: true });
+
+    if (error) {
+      console.error('[profileService.getAllTerapeutas] Error fetching therapists:', error);
+      throw error;
+    }
+    return (rawData || []).map(t => ({ id: t.id, nombre: t.nombre, apellido: t.apellido }));
+  },
 };

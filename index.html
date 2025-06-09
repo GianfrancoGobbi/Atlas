@@ -25,10 +25,24 @@
               'brand-gray': {
                 DEFAULT: '#504f4e', // Gray from SVG (cls-1)
               }
+            },
+            animation: {
+              'pulse-logo': 'pulse-logo 3s ease-in-out infinite',
+              'brain-flash': 'brain-flash 3.5s ease-in-out infinite', // Updated duration
+            },
+            keyframes: {
+              'pulse-logo': {
+                '0%, 100%': { transform: 'scale(1)' },
+                '50%': { transform: 'scale(1.03)' }, 
+              },
+              'brain-flash': { 
+                '0%, 100%': { opacity: '1' },
+                '50%': { opacity: '0.5' }, // Updated minimum opacity
+              }
             }
           }
         }
-      }; // Added semicolon here
+      };
     </script>
   <script type="importmap">
 {

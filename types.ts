@@ -91,3 +91,63 @@ export interface SupabaseAuthResponse {
   data: { user: SupabaseAuthUser | null; session: any | null; }; // Simplified session
   error: Error | null; // More accurately AuthError
 }
+
+export enum TareaEstado {
+  A_REALIZAR = 'a_realizar',
+  EN_CURSO = 'en_curso',
+  COMPLETADA = 'completada',
+}
+
+export interface TareaTerapeuta {
+  id: string;
+  terapeutaId: string; // ID of the therapist to whom the task is ASSIGNED
+  titulo: string;
+  descripcion?: string;
+  estado: TareaEstado;
+  creadaEn: string; // ISO string for timestamp without time zone (likely from DB)
+  fechaLimite?: string; // ISO string for timestamp without time zone (e.g., "YYYY-MM-DDTHH:MM:SS")
+  // Populated client-side for display convenience
+  terapeutaNombre: string; 
+  // Optional: if we need to track creator separately in the future
+  // creadoPorId?: string; 
+  // creadoPorNombre?: string;
+}
+
+export interface ObraSocial {
+  id: string;
+  nombre: string;
+  descripcion?: string;
+  contacto?: string;
+}
+
+// Facturacion Types
+export enum FacturaEstado {
+  IMPAGA = 'impaga',
+  PAGA = 'paga',
+}
+
+export interface FacturaPaciente {
+  id: string;
+  facturaId: string;
+  pacienteId: string; // References auth.users.id (UserProfile.id)
+  monto: number;
+  detalle?: string;
+  // For display purposes, populated client-side
+  pacienteNombre?: string; 
+}
+
+export interface Factura {
+  id: string;
+  terapeutaId: string;
+  obraSocialId: string;
+  monto: number;
+  estado: FacturaEstado;
+  fechaGenerada: string; // timestamp without time zone, from DB
+  fechaPago?: string | null; // timestamp without time zone, from DB
+  descripcion?: string;
+  // For display purposes, populated client-side
+  terapeutaNombre?: string;
+  obraSocialNombre?: string;
+  // For creation and detail view, array of patient line items
+  pacientes?: FacturaPaciente[]; 
+}

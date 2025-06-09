@@ -1,5 +1,5 @@
 
-import { UserRole, Turno } from './types'; // Added Turno
+import { UserRole, Turno, TareaEstado, FacturaEstado } from './types'; // Added TareaEstado, FacturaEstado
 
 export const ROLES = {
   PACIENTE: UserRole.PACIENTE,
@@ -69,4 +69,55 @@ export const USER_FRIENDLY_STATUS: Record<Turno['estado'], string> = {
     confirmado: 'Confirmado',
     cancelado: 'Cancelado',
     finalizado: 'Finalizado',
+};
+
+// Constants for Tareas Terapeutas
+export const TAREA_ESTADOS: Record<TareaEstado, string> = {
+  [TareaEstado.A_REALIZAR]: 'A Realizar',
+  [TareaEstado.EN_CURSO]: 'En Curso',
+  [TareaEstado.COMPLETADA]: 'Completada',
+};
+
+interface TareaStatusColorInfo {
+  textClass: string;
+  bgClass: string;
+  // Add other style properties if needed, like borderClass or dotClass
+}
+
+export const TAREA_ESTADO_COLORES: Record<TareaEstado, TareaStatusColorInfo> = {
+  [TareaEstado.A_REALIZAR]: {
+    textClass: 'text-yellow-800',
+    bgClass: 'bg-yellow-100',
+  },
+  [TareaEstado.EN_CURSO]: {
+    textClass: 'text-blue-800',
+    bgClass: 'bg-blue-100',
+  },
+  [TareaEstado.COMPLETADA]: {
+    textClass: 'text-green-800',
+    bgClass: 'bg-green-100',
+  },
+};
+
+// Constants for Facturas
+export const FACTURA_ESTADOS: Record<FacturaEstado, string> = {
+  [FacturaEstado.IMPAGA]: 'Impaga',
+  [FacturaEstado.PAGA]: 'Paga',
+};
+
+interface FacturaStatusColorInfo {
+  textClass: string;
+  bgClass: string;
+  // Add other style properties if needed
+}
+
+export const FACTURA_ESTADO_COLORES: Record<FacturaEstado, FacturaStatusColorInfo> = {
+  [FacturaEstado.IMPAGA]: {
+    textClass: 'text-red-800', // Similar to 'cancelado' or 'danger'
+    bgClass: 'bg-red-100',
+  },
+  [FacturaEstado.PAGA]: {
+    textClass: 'text-green-800', // Similar to 'confirmado' or 'success'
+    bgClass: 'bg-green-100',
+  },
 };

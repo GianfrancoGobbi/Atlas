@@ -93,9 +93,9 @@ export const LandingPage: React.FC = () => {
       {/* Hero Section */}
       <header className="bg-gradient-to-r from-primary-light via-primary to-primary-dark text-white py-20 md:py-32">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <Logo className="h-24 w-auto mx-auto mb-6" title={`${APP_NAME} - Centro Terapéutico`} />
+          <Logo className="h-24 w-auto mx-auto mb-6 animate-pulse-logo" title={`${APP_NAME} - Centro Terapéutico`} />
           <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">
-            Bienvenido a {APP_NAME}
+            Bienvenidos a {APP_NAME}
           </h1>
           <p className="mt-4 text-lg md:text-xl max-w-2xl mx-auto">
             Tu centro de terapias en Mendoza. Ofrecemos un espacio de contención y profesionalismo para acompañarte en tu desarrollo y bienestar.
@@ -136,6 +136,9 @@ export const LandingPage: React.FC = () => {
                 Explora las áreas en las que nuestro equipo multidisciplinario puede ofrecerte apoyo y acompañamiento.
               </p>
             </div>
+            {isLoadingAreas && (
+              <div className="flex justify-center"> <Spinner size="lg" /></div>
+            )}
             {areasError && (
               <Alert type="error" message={`Error al cargar las áreas: ${areasError}`} />
             )}

@@ -1,4 +1,3 @@
-
 // utils/timezones.ts
 
 // TARGET_TIMEZONE_IANA represents UTC-3.
@@ -19,7 +18,11 @@ export function formatUTCISOToDateTimeLocalInTargetTimezone(
     return '';
   }
   try {
-    const date = new Date(utcIsoString);
+    // Ensure the input string has a 'T' separator if it's a full ISO-like string,
+    // or handle cases where it might be just date or have a space from some DBs.
+    // For robust parsing, new Date() is quite flexible.
+    const date = new Date(utcIsoString.includes(' ') && !utcIsoString.includes('T') ? utcIsoString.replace(' ', 'T') : utcIsoString);
+    
     if (isNaN(date.getTime())) {
       // console.error(`formatUTCISOToDateTimeLocalInTargetTimezone: Invalid date from UTC ISO string: '${utcIsoString}'.`);
       return '';

@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react'; // Added useState
+import React, { useState } from 'react';
 import { Link, useNavigate, NavLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../shared/Button';
@@ -12,11 +12,6 @@ const HamburgerIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" {...props}>
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16" stroke="currentColor" className="text-primary" />
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 12h16" stroke="currentColor" className="text-secondary" />
-    {/* The original d attribute for the bottom line was "m-7 6h7" relative to the end of the second line.
-        End of second line: (20,12). Relative move m-7 6 => (20-7, 12+6) = (13,18).
-        Relative draw h7 => from (13,18) to (13+7, 18) = (20,18).
-        So, absolute path for the bottom line is M13 18h7.
-    */}
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 18h7" stroke="currentColor" className="text-brand-gray" />
   </svg>
 );
@@ -57,8 +52,8 @@ const RoleBadge: React.FC<{ role: UserRole | null }> = ({ role }) => {
 interface NavItemProps {
   to: string;
   children: React.ReactNode;
-  onClick?: () => void; // For closing mobile menu on click
-  isMobile?: boolean; // To apply different styling for mobile menu items if needed
+  onClick?: () => void; 
+  isMobile?: boolean; 
 }
 
 const NavItem: React.FC<NavItemProps> = ({ to, children, onClick, isMobile = false }) => {
@@ -84,6 +79,12 @@ const NavItem: React.FC<NavItemProps> = ({ to, children, onClick, isMobile = fal
   );
 };
 
+const getAbbreviatedName = (nombre?: string, apellido?: string): string => {
+  if (!nombre || !apellido) return 'Usuario';
+  const firstInitial = nombre.charAt(0).toUpperCase();
+  return `${firstInitial}. ${apellido}`;
+};
+
 
 export const Navbar: React.FC = () => {
   const { user, profile, role, logout, isLoading } = useAuth();
@@ -91,12 +92,14 @@ export const Navbar: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleLogout = async () => {
-    setIsMobileMenuOpen(false); // Close menu on logout
+    setIsMobileMenuOpen(false); 
     await logout();
     navigate('/login'); 
   };
 
-  const logoLinkPath = "/"; // Always link to home page
+  const logoLinkPath = "/"; 
+  const abbreviatedName = profile ? getAbbreviatedName(profile.nombre, profile.apellido) : '';
+
 
   return (
     <nav className="bg-white shadow-md sticky top-0 z-40">
@@ -116,19 +119,29 @@ export const Navbar: React.FC = () => {
               {user && profile && (
                 <>
                   <NavItem to="/dashboard">Dashboard</NavItem>
-                  <NavItem to="/perfil">Mi Perfil</NavItem>
                   <NavItem to="/turnos">Turnos</NavItem>
+                  {(role === UserRole.TERAPEUTA || role === UserRole.ADMIN) && (
+                    <>
+                      {/* <NavItem to="/tareas-equipo">Tareas Equipo</NavItem> */}
+                      {/* <NavItem to="/obras-sociales">Obras Sociales</NavItem> */}
+                      <NavItem to="/facturacion">Facturación</NavItem>
+                    </>
+                  )}
                 </>
               )}
             </div>
 
             {user && profile ? (
               <div className="flex items-center">
-                  <div className="mr-3 text-sm text-brand-gray">
-                      Hola, <span className="font-medium">{`${profile.nombre} ${profile.apellido}`}</span>
-                      <RoleBadge role={role} />
-                  </div>
-                  <Button onClick={handleLogout} variant="outline" size="sm" isLoading={isLoading}>
+                  <Link 
+                    to="/perfil" 
+                    className="mr-1 text-sm text-brand-gray hover:text-primary-dark transition-colors"
+                    title="Ir a mi perfil"
+                  >
+                      <span className="font-medium">{abbreviatedName}</span>
+                  </Link>
+                  <RoleBadge role={role} />
+                  <Button onClick={handleLogout} variant="outline" size="sm" isLoading={isLoading} className="ml-3">
                       Salir
                   </Button>
               </div>
@@ -144,7 +157,7 @@ export const Navbar: React.FC = () => {
           </div>
 
           {/* Mobile Hamburger Button */}
-          {user && ( // Only show hamburger if user is logged in
+          {user && ( 
             <div className="sm:hidden">
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -158,7 +171,6 @@ export const Navbar: React.FC = () => {
             </div>
           )}
           
-          {/* Mobile Login Button (if user is not logged in) */}
           {!user && !isLoading && (
             <div className="sm:hidden">
                 <Link to="/login">
@@ -177,13 +189,26 @@ export const Navbar: React.FC = () => {
           <div className="flex flex-col space-y-3">
             {profile && (
               <div className="px-3 py-3 border-b border-slate-200">
-                <p className="text-base font-medium text-brand-gray">Hola, {`${profile.nombre} ${profile.apellido}`}</p>
+                <Link 
+                  to="/perfil" 
+                  onClick={() => setIsMobileMenuOpen(false)} 
+                  className="text-base font-medium text-brand-gray hover:text-primary-dark transition-colors"
+                  title="Ir a mi perfil"
+                >
+                  {abbreviatedName}
+                </Link>
                 <RoleBadge role={role} />
               </div>
             )}
             <NavItem to="/dashboard" onClick={() => setIsMobileMenuOpen(false)} isMobile={true}>Dashboard</NavItem>
-            <NavItem to="/perfil" onClick={() => setIsMobileMenuOpen(false)} isMobile={true}>Mi Perfil</NavItem>
             <NavItem to="/turnos" onClick={() => setIsMobileMenuOpen(false)} isMobile={true}>Turnos</NavItem>
+            {(role === UserRole.TERAPEUTA || role === UserRole.ADMIN) && (
+              <>
+                {/* <NavItem to="/tareas-equipo" onClick={() => setIsMobileMenuOpen(false)} isMobile={true}>Tareas Equipo</NavItem> */}
+                {/* <NavItem to="/obras-sociales" onClick={() => setIsMobileMenuOpen(false)} isMobile={true}>Obras Sociales</NavItem> */}
+                <NavItem to="/facturacion" onClick={() => setIsMobileMenuOpen(false)} isMobile={true}>Facturación</NavItem>
+              </>
+            )}
             <Button onClick={handleLogout} variant="outline" size="md" isLoading={isLoading} fullWidth={true} className="mt-3">
                 Salir
             </Button>
