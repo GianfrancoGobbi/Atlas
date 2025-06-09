@@ -136,9 +136,6 @@ export const LandingPage: React.FC = () => {
                 Explora las áreas en las que nuestro equipo multidisciplinario puede ofrecerte apoyo y acompañamiento.
               </p>
             </div>
-            {isLoadingAreas && (
-              <div className="flex justify-center py-8"><Spinner size="lg" /></div>
-            )}
             {areasError && (
               <Alert type="error" message={`Error al cargar las áreas: ${areasError}`} />
             )}

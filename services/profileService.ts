@@ -105,8 +105,7 @@ function mapUserProfileToDbSchema(updates: Partial<UserProfile>): Record<string,
           dbUpdates['activo'] = value;
           break;
         default:
-          // This default case can be removed if all UserProfile keys are explicitly handled
-          // console.warn(`Unmapped key in mapUserProfileToDbSchema: ${key}`);
+          console.warn(`Unmapped key in mapUserProfileToDbSchema: ${key}`);
       }
     }
   }
@@ -118,20 +117,61 @@ export const profileService = {
   // authUserId is the id from auth.users table
   getProfileByUserId: async (authUserId: string): Promise<UserProfile | null> => {
     if (!authUserId || typeof authUserId !== 'string' || authUserId.trim() === "") {
-        // console.warn('profileService.getProfileByUserId: authUserId is invalid.');
+        console.warn('profileService.getProfileByUserId: authUserId is invalid.');
         return null;
     }
-    const { data: rawData, error }: PostgrestSingleResponse<RawUserProfile> = await supabase
-      .from('usuarios_perfil')
-      .select(RAW_PROFILE_SELECT_COLUMNS)
-      .eq('id', authUserId) // Query on 'id' column of 'usuarios_perfil'
-      .single();
+    console.log(`[profileService] Attempting to fetch profile for authUserId: ${authUserId}`);
 
-    if (error && error.code !== 'PGRST116') { // PGRST116: "0 rows" is not an error for .single()
-      // console.error('Error fetching profile:', error.message, error.details, error.hint);
-      throw error;
+    const PROFILE_FETCH_TIMEOUT = 10000; // 10 seconds
+
+    try {
+      const supabaseQuery = supabase
+        .from('usuarios_perfil')
+        .select(RAW_PROFILE_SELECT_COLUMNS)
+        .eq('id', authUserId) // Query on 'id' column of 'usuarios_perfil'
+        .single();
+
+      const timeoutPromise = new Promise<PostgrestSingleResponse<RawUserProfile>>((_, reject) =>
+        setTimeout(() => reject(new Error(`Profile fetch timed out after ${PROFILE_FETCH_TIMEOUT / 1000} seconds`)), PROFILE_FETCH_TIMEOUT)
+      );
+      
+      // Race the Supabase query against the timeout
+      const { data: rawData, error }: PostgrestSingleResponse<RawUserProfile> = await Promise.race([
+        supabaseQuery,
+        timeoutPromise
+      ]);
+
+      if (error && error.message.includes('timed out')) {
+        console.error(`[profileService] Timeout fetching profile for authUserId: ${authUserId}. Error: ${error.message}`);
+        // Optionally, re-throw or handle as a specific timeout error that AuthProvider can catch.
+        // For now, returning null will allow the UI to unblock.
+        return null;
+      }
+      
+      if (error && error.code !== 'PGRST116') { // PGRST116: "0 rows" is not an error for .single()
+        console.error('[profileService] Error fetching profile:', error.message, error.details, error.hint);
+        throw error; // Re-throw other errors
+      }
+      if (error && error.code === 'PGRST116') {
+        console.warn(`[profileService] No profile found for authUserId: ${authUserId} (PGRST116), returning null.`);
+      }
+      if (!rawData && !error) { // Should be covered by PGRST116 or timeout
+          console.warn(`[profileService] No profile data returned for authUserId: ${authUserId}, but no error. Returning null.`);
+      }
+      console.log(`[profileService] Raw profile data for ${authUserId}:`, rawData);
+      return mapRawProfileToUserProfile(rawData);
+
+    } catch (e: any) {
+      // This will catch errors from Promise.race (like the timeout error) or other unexpected errors
+      console.error(`[profileService] Exception during getProfileByUserId for ${authUserId}:`, e.message);
+      if (e.message.includes('timed out')) {
+         // Already logged, ensure null is returned or throw if a specific error type is preferred
+      } else {
+        // Rethrow other unexpected errors if necessary, or handle them
+        // For now, returning null to unblock UI.
+      }
+      return null; 
     }
-    return mapRawProfileToUserProfile(rawData);
   },
 
   // profileId is the 'id' (PK) of the 'usuarios_perfil' record to update.
@@ -139,7 +179,7 @@ export const profileService = {
     const dbUpdates = mapUserProfileToDbSchema(updates);
 
     if (Object.keys(dbUpdates).length === 0) {
-      // No valid fields to update, fetch and return current profile.
+      console.warn('[profileService.updateProfile] No valid fields to update. Fetching current profile instead.');
       const currentProfile = await profileService.getProfileByUserId(profileId);
       return currentProfile;
     }
@@ -152,7 +192,7 @@ export const profileService = {
       .single();
 
     if (error) {
-      // console.error('Error updating profile:', error.message, error.details, error.hint);
+      console.error('[profileService.updateProfile] Error updating profile:', error.message, error.details, error.hint);
       throw error;
     }
     return mapRawProfileToUserProfile(rawData);
@@ -169,18 +209,15 @@ export const profileService = {
       .order('nombre', { ascending: true });
 
     if (error) {
-      // console.error('Error fetching pacientes:', error);
+      console.error('[profileService.getPacientes] Error fetching pacientes:', error);
       throw error;
     }
-    // No full mapping needed as we selected camelCase like fields directly in a simplified way
-    // For full UserProfile, mapping would be needed if snake_case fields were selected.
-    // Here, we specifically select 'id', 'nombre', 'apellido'.
     return rawData || [];
   },
 
   getTherapistsByAreaId: async (areaId: string): Promise<UserProfile[]> => {
     if (!areaId || typeof areaId !== 'string' || areaId.trim() === "") {
-      // console.warn('profileService.getTherapistsByAreaId: areaId is invalid.');
+      console.warn('profileService.getTherapistsByAreaId: areaId is invalid.');
       return [];
     }
     const { data: rawData, error }: PostgrestResponse<RawUserProfile> = await supabase
@@ -193,7 +230,7 @@ export const profileService = {
       .order('nombre', { ascending: true });
 
     if (error) {
-      // console.error('Error fetching therapists by area:', error);
+      console.error('[profileService.getTherapistsByAreaId] Error fetching therapists by area:', error);
       throw error;
     }
     return rawData ? rawData.map(raw => mapRawProfileToUserProfile(raw)!).filter(Boolean) as UserProfile[] : [];
