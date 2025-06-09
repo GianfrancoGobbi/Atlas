@@ -16,8 +16,7 @@
     "react-router-dom": "^7.6.2",
     "react-dom": "^19.1.0",
     "@supabase/supabase-js": "2",
-    "@google/genai": "^1.4.0",
-    "@": "latest"
+    "@google/genai": "^1.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
