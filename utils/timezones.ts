@@ -1,3 +1,4 @@
+
 // utils/timezones.ts
 
 // TARGET_TIMEZONE_IANA represents UTC-3.
@@ -20,7 +21,7 @@ export function formatUTCISOToDateTimeLocalInTargetTimezone(
   try {
     const date = new Date(utcIsoString);
     if (isNaN(date.getTime())) {
-      console.error(`formatUTCISOToDateTimeLocalInTargetTimezone: Invalid date from UTC ISO string: '${utcIsoString}'.`);
+      // console.error(`formatUTCISOToDateTimeLocalInTargetTimezone: Invalid date from UTC ISO string: '${utcIsoString}'.`);
       return '';
     }
 
@@ -47,7 +48,7 @@ export function formatUTCISOToDateTimeLocalInTargetTimezone(
     const minute = timeParts.find(p => p.type === 'minute')?.value;
 
     if (!year || !month || !day || !hour || !minute) {
-      console.error("formatUTCISOToDateTimeLocalInTargetTimezone: Intl.DateTimeFormat could not extract all required date/time parts.");
+      // console.error("formatUTCISOToDateTimeLocalInTargetTimezone: Intl.DateTimeFormat could not extract all required date/time parts.");
       return '';
     }
     
@@ -56,7 +57,7 @@ export function formatUTCISOToDateTimeLocalInTargetTimezone(
     return `${year}-${month}-${day}T${hour}:${minute}`;
 
   } catch (e: any) {
-    console.error(`formatUTCISOToDateTimeLocalInTargetTimezone: Error during conversion for utcIsoString='${utcIsoString}'. Error: ${e.message}`, e);
+    // console.error(`formatUTCISOToDateTimeLocalInTargetTimezone: Error during conversion for utcIsoString='${utcIsoString}'. Error: ${e.message}`, e);
     return '';
   }
 }
@@ -79,7 +80,7 @@ export function formatTargetTimezoneDateTimeLocalToUTCISO(
   
   const [datePart, timePart] = dateTimeLocalString.split('T');
   if (!datePart || !timePart) {
-    console.error(`formatTargetTimezoneDateTimeLocalToUTCISO: dateTimeLocalString='${dateTimeLocalString}' is not in 'YYYY-MM-DDTHH:MM' format.`);
+    // console.error(`formatTargetTimezoneDateTimeLocalToUTCISO: dateTimeLocalString='${dateTimeLocalString}' is not in 'YYYY-MM-DDTHH:MM' format.`);
     return '';
   }
 
@@ -89,7 +90,7 @@ export function formatTargetTimezoneDateTimeLocalToUTCISO(
   if (!year || !month || !day || !hour || !minute ||
       isNaN(parseInt(year)) || isNaN(parseInt(month)) || isNaN(parseInt(day)) ||
       isNaN(parseInt(hour)) || isNaN(parseInt(minute))) {
-    console.error(`formatTargetTimezoneDateTimeLocalToUTCISO: Failed to parse numeric components from dateTimeLocalString='${dateTimeLocalString}'.`);
+    // console.error(`formatTargetTimezoneDateTimeLocalToUTCISO: Failed to parse numeric components from dateTimeLocalString='${dateTimeLocalString}'.`);
     return '';
   }
   
@@ -129,7 +130,7 @@ export function getLocalDateObjectForTargetTimezone(targetTimezone: string): Dat
   const secondStr = parts.find(p => p.type === 'second')?.value;
 
   if (!yearStr || !monthStr || !dayStr || !hourStr || !minuteStr || !secondStr) {
-      console.error("getLocalDateObjectForTargetTimezone: Could not extract all parts from Intl.DateTimeFormat.");
+      // console.error("getLocalDateObjectForTargetTimezone: Could not extract all parts from Intl.DateTimeFormat.");
       return new Date(); // Fallback
   }
   
@@ -144,7 +145,7 @@ export function getLocalDateObjectForTargetTimezone(targetTimezone: string): Dat
   const second = parseInt(secondStr, 10);
 
   if ([year, month, day, hour, minute, second].some(isNaN)) {
-    console.error("getLocalDateObjectForTargetTimezone: Failed to parse numeric components from Intl parts.");
+    // console.error("getLocalDateObjectForTargetTimezone: Failed to parse numeric components from Intl parts.");
     return new Date(); // Fallback
   }
   

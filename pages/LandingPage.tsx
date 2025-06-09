@@ -78,7 +78,7 @@ export const LandingPage: React.FC = () => {
         setFetchedAreas(areas);
       } catch (err: any) {
         setAreasError(err.message || 'No se pudieron cargar las áreas.');
-        console.error("Error fetching areas for landing page:", err);
+        // console.error("Error fetching areas for landing page:", err);
       } finally {
         setIsLoadingAreas(false);
       }

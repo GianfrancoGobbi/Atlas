@@ -24,70 +24,75 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<SupabaseAuthUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true); // Start true: determining initial auth state
+  const [isLoading, setIsLoading] = useState<boolean>(true); 
   const [error, setError] = useState<Error | null>(null);
 
   const fetchUserProfile = useCallback(async (authUser: SupabaseAuthUser | null) => {
-    if (authUser?.id) {
-      try {
-        const userProfile = await profileService.getProfileByUserId(authUser.id);
-        if (userProfile) {
-          setProfile(userProfile);
-          setRole(userProfile.role);
-        } else {
-          setProfile(null);
-          setRole(null);
-          console.warn('Perfil de usuario no encontrado para el ID:', authUser.id, 'Esto puede ser normal si el registro requiere confirmación por email y el perfil se crea post-confirmación, o si el trigger de la BD aún no se ha ejecutado.');
-        }
-      } catch (e: any) {
-        setError(new Error(`Error al cargar perfil: ${e.message}`));
+    if (!authUser?.id) {
+      setProfile(null);
+      setRole(null);
+      return;
+    }
+
+    try {
+      const userProfile = await profileService.getProfileByUserId(authUser.id);
+      if (userProfile) {
+        setProfile(userProfile);
+        setRole(userProfile.role);
+      } else {
         setProfile(null);
         setRole(null);
+        // console.warn(`[fetchUserProfile] Profile not found for user ID: ${authUser.id}. This might be normal during sign-up or if DB trigger hasn't run.`);
       }
-    } else {
+    } catch (e: any) {
+      // console.error(`[fetchUserProfile] Error fetching profile for user ID: ${authUser.id}:`, e);
+      setError(new Error(`Error al cargar perfil: ${e.message}`));
       setProfile(null);
       setRole(null);
     }
-  }, []); // Assuming profileService is stable
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
-    setIsLoading(true);
-    setError(null);
-    // Initialize user and profile to null to ensure clean state before listener confirms.
-    setUser(null);
-    setProfile(null);
-    setRole(null);
+    // setIsLoading(true) is already set by default.
 
     const { data: { subscription } } = authService.onAuthStateChange(
       async (event, session) => {
-        if (!isMounted) return;
-
-        // Log auth events for debugging persistence issues
-        console.log('[Auth Event]', { event, sessionId: session?.user?.id, userEmail: session?.user?.email, hasSession: !!session });
-
-        const authUser = session?.user ?? null;
-        setUser(authUser);
-
-        if (authUser) {
-          // fetchUserProfile handles its own errors and sets context error if needed
-          await fetchUserProfile(authUser);
-        } else {
-          setProfile(null);
-          setRole(null);
+        if (!isMounted) {
+          return;
         }
+        
+        const authUser = session?.user ?? null;
+        setUser(authUser); 
 
-        // Set loading to false only after the initial state is determined (INITIAL_SESSION)
-        // or a definitive sign-in/sign-out occurs.
-        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-          setIsLoading(false);
+        if (event === 'INITIAL_SESSION') {
+          if (authUser) {
+            await fetchUserProfile(authUser); 
+          } else {
+            setProfile(null);
+            setRole(null);
+          }
+          if (isMounted) {
+            setIsLoading(false); 
+          }
+        } else if (event === 'SIGNED_IN') {
+          if (authUser) {
+            await fetchUserProfile(authUser); 
+          } else {
+             if(isMounted) { setProfile(null); setRole(null); }
+          }
+          // isLoading should already be false from INITIAL_SESSION or its own logic path.
+        } else if (event === 'SIGNED_OUT') {
+          if (isMounted) {
+            setProfile(null);
+            setRole(null);
+            setIsLoading(false); 
+          }
+        } else if (event === 'USER_UPDATED' && authUser) {
+            await fetchUserProfile(authUser);
         }
       }
     );
-
-    // The explicit authService.getCurrentSession() call has been removed.
-    // The onAuthStateChange listener with its INITIAL_SESSION event is responsible
-    // for restoring the session from localStorage.
 
     return () => {
       isMounted = false;
@@ -95,16 +100,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         subscription.unsubscribe();
       }
     };
-  }, [fetchUserProfile]); 
+  }, [fetchUserProfile]);
 
   const login = useCallback(async (credentials: LoginCredentials) => {
     setError(null);
     try {
       await authService.login(credentials);
-      // onAuthStateChange will handle setting user, profile, role, and isLoading.
+      // User and profile will be updated by onAuthStateChange listener
     } catch (e: any) {
-      setError(e); // Set error in context for global display if needed
-      throw e; // Re-throw for form-level error handling
+      setError(e); 
+      throw e;
     }
   }, []);
 
@@ -112,7 +117,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setError(null);
     try {
       await authService.signUp(credentials);
-      // onAuthStateChange will handle new user state if auto-confirmation is on.
+      // User and profile will be updated by onAuthStateChange listener,
+      // or user will need to confirm email.
     } catch (e: any) {
       setError(e);
       throw e;
@@ -123,7 +129,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setError(null);
     try {
       await authService.logout();
-      // onAuthStateChange handles setting user, profile, role to null and isLoading.
+      // User, profile, role will be cleared by onAuthStateChange listener
     } catch (e: any) {
       setError(e);
       throw e;
@@ -132,22 +138,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const refreshProfile = useCallback(async () => {
     if (user) {
-      // setError(null); // Keep existing errors unless specifically cleared by this action
-      // setIsLoading(true); // Let fetchUserProfile manage its own micro-loading if needed, or rely on global
-      try {
-        await fetchUserProfile(user);
-      } catch (e: any) { // This catch might be redundant if fetchUserProfile sets error
-        setError(new Error(`Error al refrescar perfil: ${e.message}`));
-      } finally {
-        // setIsLoading(false);
-      }
+      await fetchUserProfile(user); 
     }
   }, [user, fetchUserProfile]);
 
   return (
     <AuthContext.Provider value={{ user, profile, role, isLoading, error, login, signUp, logout, refreshProfile }}>
-      {isLoading && ( // Show a global spinner if isLoading is true (e.g. initial auth check)
-         <div className="fixed inset-0 bg-white bg-opacity-75 flex items-center justify-center z-[100]">
+      {isLoading && (
+         <div className="fixed inset-0 bg-white bg-opacity-75 flex items-center justify-center z-[100]" aria-live="assertive" aria-label="Cargando aplicación...">
            <Spinner size="lg" />
          </div>
       )}

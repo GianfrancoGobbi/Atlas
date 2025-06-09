@@ -76,7 +76,7 @@ export const appointmentService = {
         .order('fecha_hora_inicio', { ascending: true });
 
     if (error) {
-      console.error('Error fetching appointments:', error);
+      // console.error('Error fetching appointments:', error);
       throw error;
     }
     return rawData ? rawData.map(mapRawTurnoToTurno) : [];
@@ -90,7 +90,7 @@ export const appointmentService = {
       .single();
   
     if (error && error.code !== 'PGRST116') { 
-      console.error(`Error fetching appointment by ID ${turnoId}:`, error);
+      // console.error(`Error fetching appointment by ID ${turnoId}:`, error);
       throw error;
     }
     if (!rawData) return null;
@@ -110,7 +110,7 @@ export const appointmentService = {
       .select(SELECTED_TURNO_FIELDS);
 
     if (error) {
-      console.error('Error creating appointments:', error);
+      // console.error('Error creating appointments:', error);
       throw error;
     }
     // createdRawData will have fechaHoraInicio/Fin as UTC ISO strings from DB.
@@ -127,7 +127,7 @@ export const appointmentService = {
         .single();
     
     if (error) {
-        console.error('Error creating single appointment:', error);
+        // console.error('Error creating single appointment:', error);
         throw error;
     }
     if (!createdRawData) {
@@ -153,7 +153,7 @@ export const appointmentService = {
         .single();
 
     if (error) {
-        console.error(`Error updating appointment ${turnoId}:`, error);
+        // console.error(`Error updating appointment ${turnoId}:`, error);
         throw error;
     }
     if (!updatedRawData) return null;
@@ -163,7 +163,7 @@ export const appointmentService = {
 
   deleteAppointment: async (turnoId: string): Promise<void> => {
     if (!turnoId) {
-      console.error('appointmentService.deleteAppointment: turnoId is null or empty. Aborting delete.');
+      // console.error('appointmentService.deleteAppointment: turnoId is null or empty. Aborting delete.');
       throw new Error('turnoId cannot be null or empty for deletion.');
     }
     
@@ -173,7 +173,7 @@ export const appointmentService = {
       .eq('id', turnoId);
 
     if (error) {
-      console.error(`appointmentService.deleteAppointment: Error deleting appointment ${turnoId} from Supabase:`, error);
+      // console.error(`appointmentService.deleteAppointment: Error deleting appointment ${turnoId} from Supabase:`, error);
       throw error;
     }
   },

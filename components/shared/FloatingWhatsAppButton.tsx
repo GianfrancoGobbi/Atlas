@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useContext } from 'react'; // Added useContext
 // Removed useLocation, areaService, profileService as they are no longer used here.
 import { WhatsAppContext } from '../../contexts/WhatsAppContext'; // Import WhatsAppContext
@@ -17,7 +18,7 @@ export const FloatingWhatsAppButton: React.FC = () => {
 
   if (!whatsAppContext) {
     // This case should ideally not be hit if the Provider is set up correctly at App root
-    console.error("[WhatsAppButton] WhatsAppContext not found. Button will not render.");
+    // console.error("[WhatsAppButton] WhatsAppContext not found. Button will not render.");
     return null;
   }
 
@@ -41,7 +42,7 @@ export const FloatingWhatsAppButton: React.FC = () => {
 
   const handleWhatsAppClick = () => {
     if (!effectivePhoneNumber || effectivePhoneNumber.trim() === '') {
-      console.error("[WhatsAppButton Click] No effective phone number. Click ignored.");
+      // console.error("[WhatsAppButton Click] No effective phone number. Click ignored.");
       return;
     }
     // console.log(`[WhatsAppButton Click] Opening WhatsApp for number: '${effectivePhoneNumber}'`);

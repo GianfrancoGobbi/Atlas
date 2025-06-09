@@ -194,7 +194,7 @@ export const AppointmentDetailPage: React.FC = () => {
       setAnnotations(enhancedNotes);
     } catch (e: any) {
       setAiError(e.message || "Error al mejorar las notas con IA.");
-      console.error("Error enhancing notes with AI:", e);
+      // console.error("Error enhancing notes with AI:", e);
     } finally {
       setIsAiProcessing(false);
     }

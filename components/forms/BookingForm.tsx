@@ -134,9 +134,9 @@ export const BookingForm: React.FC<BookingFormProps> = ({ therapistId, existingA
 
       // Check for invalid formatted strings from utility
       if (!existingStartLocalShort || !existingEndLocalShort) {
-        console.warn(`Could not format existing appointment times (ID: ${existing.id}) for conflict check. Start: ${existing.fechaHoraInicio}, End: ${existing.fechaHoraFin}`);
+        // console.warn(`Could not format existing appointment times (ID: ${existing.id}) for conflict check. Start: ${existing.fechaHoraInicio}, End: ${existing.fechaHoraFin}`);
         // Depending on desired strictness, you might treat this as a potential conflict or log and skip.
-        // For safety, let's assume it could be a conflict if formatting fails, though ideally it shouldn't.
+        // For safety, let's assume it could be a potential conflict if formatting fails, though ideally it shouldn't.
         return true; 
       }
 

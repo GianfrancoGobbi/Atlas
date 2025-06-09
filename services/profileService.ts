@@ -1,3 +1,4 @@
+
 import { supabase } from '../lib/supabaseClient';
 import { UserProfile, UserRole } from '../types'; // UserProfile uses camelCase
 import type { PostgrestSingleResponse, PostgrestResponse } from '@supabase/supabase-js';
@@ -105,7 +106,7 @@ function mapUserProfileToDbSchema(updates: Partial<UserProfile>): Record<string,
           break;
         default:
           // This default case can be removed if all UserProfile keys are explicitly handled
-          console.warn(`Unmapped key in mapUserProfileToDbSchema: ${key}`);
+          // console.warn(`Unmapped key in mapUserProfileToDbSchema: ${key}`);
       }
     }
   }
@@ -117,7 +118,7 @@ export const profileService = {
   // authUserId is the id from auth.users table
   getProfileByUserId: async (authUserId: string): Promise<UserProfile | null> => {
     if (!authUserId || typeof authUserId !== 'string' || authUserId.trim() === "") {
-        console.warn('profileService.getProfileByUserId: authUserId is invalid.');
+        // console.warn('profileService.getProfileByUserId: authUserId is invalid.');
         return null;
     }
     const { data: rawData, error }: PostgrestSingleResponse<RawUserProfile> = await supabase
@@ -127,7 +128,7 @@ export const profileService = {
       .single();
 
     if (error && error.code !== 'PGRST116') { // PGRST116: "0 rows" is not an error for .single()
-      console.error('Error fetching profile:', error.message, error.details, error.hint);
+      // console.error('Error fetching profile:', error.message, error.details, error.hint);
       throw error;
     }
     return mapRawProfileToUserProfile(rawData);
@@ -151,7 +152,7 @@ export const profileService = {
       .single();
 
     if (error) {
-      console.error('Error updating profile:', error.message, error.details, error.hint);
+      // console.error('Error updating profile:', error.message, error.details, error.hint);
       throw error;
     }
     return mapRawProfileToUserProfile(rawData);
@@ -168,7 +169,7 @@ export const profileService = {
       .order('nombre', { ascending: true });
 
     if (error) {
-      console.error('Error fetching pacientes:', error);
+      // console.error('Error fetching pacientes:', error);
       throw error;
     }
     // No full mapping needed as we selected camelCase like fields directly in a simplified way
@@ -179,7 +180,7 @@ export const profileService = {
 
   getTherapistsByAreaId: async (areaId: string): Promise<UserProfile[]> => {
     if (!areaId || typeof areaId !== 'string' || areaId.trim() === "") {
-      console.warn('profileService.getTherapistsByAreaId: areaId is invalid.');
+      // console.warn('profileService.getTherapistsByAreaId: areaId is invalid.');
       return [];
     }
     const { data: rawData, error }: PostgrestResponse<RawUserProfile> = await supabase
@@ -192,7 +193,7 @@ export const profileService = {
       .order('nombre', { ascending: true });
 
     if (error) {
-      console.error('Error fetching therapists by area:', error);
+      // console.error('Error fetching therapists by area:', error);
       throw error;
     }
     return rawData ? rawData.map(raw => mapRawProfileToUserProfile(raw)!).filter(Boolean) as UserProfile[] : [];

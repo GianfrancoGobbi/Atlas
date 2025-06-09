@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 import type { GenerateContentResponse } from "@google/genai";
 
@@ -10,11 +11,11 @@ if (apiKey) {
   try {
     ai = new GoogleGenAI({ apiKey });
   } catch (error) {
-    console.error("Error initializing GoogleGenAI:", error);
+    // console.error("Error initializing GoogleGenAI:", error);
     ai = null; // Ensure ai is null if initialization fails
   }
 } else {
-  console.warn("Gemini API key (process.env.API_KEY) not found. AI features will be disabled.");
+  // console.warn("Gemini API key (process.env.API_KEY) not found. AI features will be disabled.");
 }
 
 
@@ -45,7 +46,7 @@ export const geminiService = {
       return enhancedText.trim();
 
     } catch (error: any) {
-      console.error("Error calling Gemini API:", error);
+      // console.error("Error calling Gemini API:", error);
       if (error.message) {
           throw new Error(`Error de la API de Gemini: ${error.message}`);
       }
