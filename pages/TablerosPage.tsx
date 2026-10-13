@@ -12,13 +12,15 @@ import { VistaComparativas } from '../components/reportes/VistaComparativas';
 import { VistaRentabilidad } from '../components/reportes/VistaRentabilidad';
 import { VistaPacientes } from '../components/reportes/VistaPacientes';
 import { VistaAreas } from '../components/reportes/VistaAreas';
+import { VistaResultado } from '../components/reportes/VistaResultado';
+import { analizarCostos } from '../utils/resultado';
 import { DatosTableros, reportesService } from '../services/reportesService';
 import {
   analizarFacturas, analizarTurnos, AreaPorTerapeuta, SIN_AREA, CalidadDatos, FILTROS_INICIALES, FiltroEstado, Filtros, filtrarFacturas, filtrarTurnos,
   alCorte, hoyDia, PRESETS_PERIODO, PresetPeriodo, rangoAnioAnterior, rangoDeFiltros, unAnioAntes,
 } from '../utils/reportes';
 
-type Vista = SeccionCobranzas | SeccionSesiones | 'comparativas' | 'rentabilidad' | 'pacientes' | 'areas' | 'terapeutas';
+type Vista = SeccionCobranzas | SeccionSesiones | 'comparativas' | 'rentabilidad' | 'pacientes' | 'areas' | 'resultado' | 'terapeutas';
 
 // Menú de vistas: todas a un clic, agrupadas por tema.
 const GRUPOS: { titulo: string; soloAdmin?: boolean; vistas: { id: Vista; etiqueta: string }[] }[] = [
@@ -46,6 +48,7 @@ const GRUPOS: { titulo: string; soloAdmin?: boolean; vistas: { id: Vista; etique
       { id: 'areas', etiqueta: 'Por área' },
     ],
   },
+  { titulo: 'Finanzas', soloAdmin: true, vistas: [{ id: 'resultado', etiqueta: 'Resultado' }] },
   { titulo: 'Equipo', soloAdmin: true, vistas: [{ id: 'terapeutas', etiqueta: 'Por terapeuta' }] },
 ];
 
@@ -241,6 +244,9 @@ export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, er
   const inflacion = Number.isFinite(infParam) && infParam > 0 && infParam < 100 ? infParam / 100 : INFLACION_POR_DEFECTO;
   const actualizarFiltros = (f: Filtros) => setParams(aParams(f, vista, inflacion), { replace: true });
   const cambiarVista = (v: Vista) => setParams(aParams(filtros, v, inflacion), { replace: true });
+  // Resultado: toda la clínica (sin filtros de obra social, terapeuta, área ni estado) y los costos cargados.
+  const facturasClinica = useMemo(() => base?.facturas ?? [], [base]);
+  const costosAnalizados = useMemo(() => analizarCostos(datos?.costos ?? []), [datos]);
   const cambiarInflacion = (i: number) => setParams(aParams(filtros, vista, i), { replace: true });
   // Para la vista por área: los mismos filtros salvo el de área (es una vista comparativa entre áreas).
   const facturasSinArea = useMemo(() => (base ? filtrarFacturas(base.facturas, { ...filtros, areas: [] }, rango, areaPorTerapeuta) : []), [base, filtros, rango, areaPorTerapeuta]);
@@ -370,6 +376,17 @@ export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, er
               onAlternarArea={alternar('areas')}
               rango={rango}
               hoy={hoy}
+              actualizando={cargando}
+            />
+          )}
+          {base && vista === 'resultado' && datos && (
+            <VistaResultado
+              facturas={facturasClinica}
+              costos={costosAnalizados}
+              rango={rango}
+              hoy={hoy}
+              areas={datos.areas}
+              areaPorTerapeuta={areaPorTerapeuta}
               actualizando={cargando}
             />
           )}

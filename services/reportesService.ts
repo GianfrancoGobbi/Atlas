@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabaseClient';
+import type { CostoRaw } from './costosService';
 import type { AreaRaw, FacturaPacienteRaw, FacturaRaw, HistorialRaw, ObraSocialRaw, PersonaRaw, TurnoRaw } from '../utils/reportes';
 
 // Datos de los tableros. El RLS de Supabase decide qué filas llegan:
@@ -28,11 +29,12 @@ export interface DatosTableros {
   areas: AreaRaw[];
   facturaPacientes: FacturaPacienteRaw[];
   historial: HistorialRaw[];
+  costos: CostoRaw[]; // solo administración los recibe (RLS)
 }
 
 export const reportesService = {
   cargar: async (): Promise<DatosTableros> => {
-    const [facturas, obrasSociales, turnos, terapeutas, areas, facturaPacientes, historial] = await Promise.all([
+    const [facturas, obrasSociales, turnos, terapeutas, areas, facturaPacientes, historial, costos] = await Promise.all([
       traerTodo<FacturaRaw>('facturas', 'id, terapeuta_id, obra_social_id, monto, estado, fecha_generada, fecha_pago, sesiones'),
       traerTodo<ObraSocialRaw>('obras_sociales', 'id, nombre, dias_vencimiento'),
       traerTodo<TurnoRaw>('turnos', 'id, terapeuta_id, paciente_id, fecha_hora_inicio, fecha_hora_fin, estado, inicio_real, fin_real'),
@@ -50,7 +52,8 @@ export const reportesService = {
       }),
       traerTodo<FacturaPacienteRaw>('factura_pacientes', 'id, factura_id, paciente_id, sesiones, monto'),
       traerTodo<HistorialRaw>('historial_clinico', 'id, paciente_id, terapeuta_id, fecha'),
+      traerTodo<CostoRaw>('costos', 'id, mes, categoria, descripcion, monto, area_id, terapeuta_id, recurrente'),
     ]);
-    return { facturas, obrasSociales, turnos, terapeutas, areas, facturaPacientes, historial };
+    return { facturas, obrasSociales, turnos, terapeutas, areas, facturaPacientes, historial, costos };
   },
 };

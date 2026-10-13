@@ -87,7 +87,7 @@ const inicioDeMes = (dia: number, mesesAtras = 0): number => {
 };
 
 // Meses 'AAAA-MM' consecutivos entre dos días (inclusive).
-const mesesEntre = (desde: number, hasta: number): string[] => {
+export const mesesEntre = (desde: number, hasta: number): string[] => {
   const meses: string[] = [];
   const f = new Date(inicioDeMes(desde) * DIA_MS);
   const fin = mesDe(hasta);
