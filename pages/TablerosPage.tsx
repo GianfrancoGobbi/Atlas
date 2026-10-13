@@ -8,13 +8,14 @@ import { BarraFiltros } from '../components/reportes/BarraFiltros';
 import { SeccionCobranzas, VistaCobranzas } from '../components/reportes/VistaCobranzas';
 import { SeccionSesiones, VistaSesiones } from '../components/reportes/VistaSesiones';
 import { VistaTerapeutas } from '../components/reportes/VistaTerapeutas';
+import { VistaComparativas } from '../components/reportes/VistaComparativas';
 import { DatosTableros, reportesService } from '../services/reportesService';
 import {
   analizarFacturas, analizarTurnos, CalidadDatos, FILTROS_INICIALES, FiltroEstado, Filtros, filtrarFacturas, filtrarTurnos,
-  hoyDia, PRESETS_PERIODO, PresetPeriodo, rangoDeFiltros,
+  alCorte, hoyDia, PRESETS_PERIODO, PresetPeriodo, rangoAnioAnterior, rangoDeFiltros, unAnioAntes,
 } from '../utils/reportes';
 
-type Vista = SeccionCobranzas | SeccionSesiones | 'terapeutas';
+type Vista = SeccionCobranzas | SeccionSesiones | 'comparativas' | 'terapeutas';
 
 // Menú de vistas: todas a un clic, agrupadas por tema.
 const GRUPOS: { titulo: string; soloAdmin?: boolean; vistas: { id: Vista; etiqueta: string }[] }[] = [
@@ -33,6 +34,7 @@ const GRUPOS: { titulo: string; soloAdmin?: boolean; vistas: { id: Vista; etique
       { id: 'turnos', etiqueta: 'Turnos' },
     ],
   },
+  { titulo: 'Análisis', vistas: [{ id: 'comparativas', etiqueta: 'Comparativas' }] },
   { titulo: 'Equipo', soloAdmin: true, vistas: [{ id: 'terapeutas', etiqueta: 'Por terapeuta' }] },
 ];
 
@@ -173,7 +175,18 @@ export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, er
   const rango = useMemo(() => rangoDeFiltros(filtros, hoy), [filtros, hoy]);
   const facturas = useMemo(() => (base ? filtrarFacturas(base.facturas, filtros, rango) : []), [base, filtros, rango]);
   const turnos = useMemo(() => (base ? filtrarTurnos(base.turnos, filtros, rango) : []), [base, filtros, rango]);
-  // Mismos filtros pero sin período: para contar los turnos próximos.
+  // Mismos filtros pero sin período: para los turnos próximos y las comparativas de mes y año.
+  const sinPeriodo = { desde: null, hasta: null };
+  // Las comparativas ignoran el estado de pago: comparar solo las pagas o impagas de dos períodos distorsiona todo.
+  const facturasTodas = useMemo(() => (base ? filtrarFacturas(base.facturas, { ...filtros, estado: 'todas' }, sinPeriodo) : []), [base, filtros]);
+  // El mismo período un año antes, para la variación de los indicadores.
+  const rangoAA = useMemo(() => rangoAnioAnterior(rango), [rango]);
+  // Vistas como estaban hace un año, para que tengan el mismo tiempo para cobrarse que las actuales.
+  const facturasAA = useMemo(
+    () => (base && rangoAA ? alCorte(filtrarFacturas(base.facturas, filtros, rangoAA), unAnioAntes(hoy)) : null),
+    [base, filtros, rangoAA, hoy],
+  );
+  const turnosAA = useMemo(() => (base && rangoAA ? filtrarTurnos(base.turnos, filtros, rangoAA) : null), [base, filtros, rangoAA]);
   const turnosTodos = useMemo(() => (base ? filtrarTurnos(base.turnos, filtros, { desde: null, hasta: null }) : []), [base, filtros]);
 
   // Opciones de filtro: solo lo que aparece en los datos que esta persona puede ver.
@@ -260,6 +273,7 @@ export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, er
             <VistaCobranzas
               seccion={vista}
               facturas={facturas}
+              facturasAnioAnterior={facturasAA}
               rango={rango}
               obrasSeleccionadas={filtros.obrasSociales}
               onAlternarObraSocial={alternar('obrasSociales')}
@@ -273,12 +287,23 @@ export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, er
               facturas={facturas}
               turnos={turnos}
               turnosTodos={turnosTodos}
+              facturasAnioAnterior={facturasAA}
+              turnosAnioAnterior={turnosAA}
               personas={datos?.terapeutas ?? []}
               hoy={hoy}
               rango={rango}
               obrasSeleccionadas={filtros.obrasSociales}
               onAlternarObraSocial={alternar('obrasSociales')}
               avisoFiltrosNoAplican={filtros.obrasSociales.length > 0 || filtros.estado !== 'todas'}
+              actualizando={cargando}
+            />
+          )}
+          {base && vista === 'comparativas' && (
+            <VistaComparativas
+              facturas={facturasTodas}
+              turnos={turnosTodos}
+              hoy={hoy}
+              filtroObraSocial={filtros.obrasSociales.length > 0}
               actualizando={cargando}
             />
           )}

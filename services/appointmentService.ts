@@ -14,6 +14,7 @@ interface RawTurno {
   estado: 'pendiente' | 'confirmado' | 'cancelado' | 'finalizado'; 
   notas_paciente?: string | null;
   notas_terapeuta?: string | null;
+  inicio_real?: string | null; // hora real de inicio (hora local, sin zona)
 }
 
 function mapRawTurnoToTurno(raw: RawTurno): Turno {
@@ -26,6 +27,7 @@ function mapRawTurnoToTurno(raw: RawTurno): Turno {
     estado: raw.estado,
     notasPaciente: raw.notas_paciente ?? undefined,
     notasTerapeuta: raw.notas_terapeuta ?? undefined,
+    inicioReal: raw.inicio_real ?? null,
   };
 }
 
@@ -43,8 +45,8 @@ function mapTurnoToRawTurnoData(turno: Omit<Turno, 'id'>): Omit<RawTurno, 'id' >
   };
 }
 
-type UpdatableTurnoFields = 'estado' | 'notasTerapeuta' | 'notasPaciente' | 'fechaHoraInicio' | 'fechaHoraFin';
-type RawUpdatableTurnoFields = 'estado' | 'notas_terapeuta' | 'notas_paciente' | 'fecha_hora_inicio' | 'fecha_hora_fin';
+type UpdatableTurnoFields = 'estado' | 'notasTerapeuta' | 'notasPaciente' | 'fechaHoraInicio' | 'fechaHoraFin' | 'inicioReal';
+type RawUpdatableTurnoFields = 'estado' | 'notas_terapeuta' | 'notas_paciente' | 'fecha_hora_inicio' | 'fecha_hora_fin' | 'inicio_real';
 
 
 function mapTurnoUpdatesToRawTurnoUpdates(updates: Partial<Pick<Turno, UpdatableTurnoFields>>): Partial<Pick<RawTurno, RawUpdatableTurnoFields>> {
@@ -55,10 +57,11 @@ function mapTurnoUpdatesToRawTurnoUpdates(updates: Partial<Pick<Turno, Updatable
     // When updating, fechaHoraInicio/Fin are local time strings (YYYY-MM-DDTHH:MM:SS)
     if (updates.fechaHoraInicio) dbUpdates.fecha_hora_inicio = updates.fechaHoraInicio;
     if (updates.fechaHoraFin) dbUpdates.fecha_hora_fin = updates.fechaHoraFin;
+    if (updates.inicioReal !== undefined) dbUpdates.inicio_real = updates.inicioReal; // null la borra
     return dbUpdates;
 }
 
-const SELECTED_TURNO_FIELDS = 'id, paciente_id, terapeuta_id, fecha_hora_inicio, fecha_hora_fin, estado, notas_paciente, notas_terapeuta'; 
+const SELECTED_TURNO_FIELDS = 'id, paciente_id, terapeuta_id, fecha_hora_inicio, fecha_hora_fin, estado, notas_paciente, notas_terapeuta, inicio_real';
 
 export const appointmentService = {
   getAppointmentsByUserId: async (userId: string, role: UserRole): Promise<Turno[]> => {

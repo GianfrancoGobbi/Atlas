@@ -8,6 +8,7 @@ import {
   antiguedadDeuda, cobranzaPorMes, ESTADOS_COBRANZA, EstadoCobranza, FacturaAnalizada,
   FilaObraSocial, PLAZO_POR_DEFECTO, Rango, resumenPorObraSocial, resumirCobranza,
 } from '../../utils/reportes';
+import { deltaPct, deltaPuntos, deltaValor } from '../../utils/comparaciones';
 
 export type SeccionCobranzas = 'resumen' | 'obras' | 'deuda';
 
@@ -31,6 +32,7 @@ export const ChipEstado: React.FC<{ estado: EstadoCobranza }> = ({ estado }) => 
 interface Props {
   seccion: SeccionCobranzas;
   facturas: FacturaAnalizada[];
+  facturasAnioAnterior: FacturaAnalizada[] | null; // mismo período, un año antes (null si no aplica)
   rango: Rango;
   obrasSeleccionadas: string[];
   onAlternarObraSocial: (id: string) => void;
@@ -39,9 +41,11 @@ interface Props {
 }
 
 export const VistaCobranzas: React.FC<Props> = ({
-  seccion, facturas, rango, obrasSeleccionadas, onAlternarObraSocial, nombreTerapeuta, actualizando,
+  seccion, facturas, facturasAnioAnterior, rango, obrasSeleccionadas, onAlternarObraSocial, nombreTerapeuta, actualizando,
 }) => {
   const resumen = useMemo(() => resumirCobranza(facturas), [facturas]);
+  const resumenAA = useMemo(() => (facturasAnioAnterior ? resumirCobranza(facturasAnioAnterior) : null), [facturasAnioAnterior]);
+  const VS = 'vs mismo período del año anterior';
   const meses = useMemo(() => cobranzaPorMes(facturas, rango), [facturas, rango]);
   const porObra = useMemo(() => resumenPorObraSocial(facturas), [facturas]);
   const tramos = useMemo(() => antiguedadDeuda(facturas), [facturas]);
@@ -214,8 +218,16 @@ export const VistaCobranzas: React.FC<Props> = ({
           valor={fmt.monedaCompacta(resumen.vencido)}
           detalle={`${fmt.entero(resumen.cantVencidas)} facturas · hasta ${fmt.entero(resumen.mayorAtraso)} días`}
         />
-        <Indicador etiqueta="Facturado" valor={fmt.monedaCompacta(resumen.facturado)} detalle={`${fmt.entero(resumen.cantidad)} facturas`} />
         <Indicador
+          etiqueta="Facturado"
+          valor={fmt.monedaCompacta(resumen.facturado)}
+          delta={resumenAA ? deltaPct(resumen.facturado, resumenAA.facturado) : undefined}
+          deltaEtiqueta={VS}
+          detalle={`${fmt.entero(resumen.cantidad)} facturas`}
+        />
+        <Indicador
+          delta={resumenAA ? deltaPct(resumen.cobrado, resumenAA.cobrado) : undefined}
+          deltaEtiqueta={VS}
           etiqueta="Cobrado"
           valor={fmt.monedaCompacta(resumen.cobrado)}
           detalle={resumen.facturado ? `${fmt.pct(resumen.cobrado / resumen.facturado)} de lo facturado` : undefined}
@@ -224,9 +236,13 @@ export const VistaCobranzas: React.FC<Props> = ({
         <Indicador
           etiqueta="Días promedio de cobro"
           valor={resumen.diasPromCobro === null ? '—' : fmt.decimal(resumen.diasPromCobro)}
+          delta={resumenAA ? deltaValor(resumen.diasPromCobro, resumenAA.diasPromCobro, 'd') : undefined}
+          deltaEtiqueta={VS}
           detalle={`Plazo habitual: ${plazoHabitual} días`}
         />
         <Indicador
+          delta={resumenAA ? deltaPuntos(resumen.pctEnPlazo, resumenAA.pctEnPlazo) : undefined}
+          deltaEtiqueta={VS}
           etiqueta="Cobradas en plazo"
           icono={<IconoEstado tipo="bien" />}
           valor={fmt.pct(resumen.pctEnPlazo)}

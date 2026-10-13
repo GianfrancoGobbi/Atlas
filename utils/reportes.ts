@@ -25,6 +25,7 @@ export interface TurnoRaw {
   fecha_hora_inicio: string | null;
   fecha_hora_fin: string | null;
   estado: string | null;
+  inicio_real?: string | null;
 }
 
 export interface PersonaRaw {
@@ -348,9 +349,26 @@ export interface TurnoAnalizado {
   hora: number; // hora local, tal como se guardó
   duracionMin: number | null;
   estado: string;
+  atrasoMin: number | null; // inicio real − horario del turno (negativo = empezó antes); null si no se registró
 }
 
 const minutosDe = (s: string) => Number(s.slice(11, 13)) * 60 + Number(s.slice(14, 16));
+
+// Minutos entre dos horas locales 'AAAA-MM-DDTHH:MM...' (b − a).
+export const minutosEntre = (a: string, b: string): number => (diaDe(b) - diaDe(a)) * 1440 + minutosDe(b) - minutosDe(a);
+
+// Hora local 'AAAA-MM-DDTHH:MM:SS' corrida `m` minutos.
+export const sumarMinutos = (s: string, m: number): string => {
+  const total = diaDe(s) * 1440 + minutosDe(s) + m;
+  const dia = Math.floor(total / 1440);
+  const min = total - dia * 1440;
+  return `${diaAIso(dia)}T${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}:00`;
+};
+
+// Hasta esta cantidad de minutos de atraso, el turno cuenta como puntual.
+export const TOLERANCIA_PUNTUAL_MIN = 5;
+// Diferencias de más de 12 horas no son un atraso real sino un dato mal cargado: no entran en los promedios.
+export const ATRASO_MAX_VALIDO_MIN = 12 * 60;
 
 export function analizarTurnos(filas: TurnoRaw[]): TurnoAnalizado[] {
   return filas
@@ -371,6 +389,11 @@ export function analizarTurnos(filas: TurnoRaw[]): TurnoAnalizado[] {
         hora: Math.floor(inicio / 60),
         duracionMin,
         estado: t.estado ?? 'sin estado',
+        atrasoMin: (() => {
+          if (!t.inicio_real) return null;
+          const m = minutosEntre(t.fecha_hora_inicio, t.inicio_real);
+          return Math.abs(m) > ATRASO_MAX_VALIDO_MIN ? null : m;
+        })(),
       };
     });
 }
@@ -400,6 +423,10 @@ export interface ResumenTurnos {
   sinCerrar: number;
   atrasoProm: number | null; // días promedio de los turnos sin cerrar
   atrasoMax: number;
+  conInicio: number; // turnos con hora real de inicio registrada
+  atrasoMinProm: number | null; // minutos promedio de atraso al empezar (los que empezaron antes cuentan como 0)
+  atrasoMinMax: number;
+  pctPuntuales: number | null; // empezaron con hasta TOLERANCIA_PUNTUAL_MIN minutos de atraso
 }
 
 export function resumirTurnos(ts: TurnoAnalizado[], hoy: number): ResumenTurnos {
@@ -409,6 +436,7 @@ export function resumirTurnos(ts: TurnoAnalizado[], hoy: number): ResumenTurnos 
   const pasados = ts.filter(t => t.dia < hoy);
   const atrasos = pasados.filter(t => ESTADOS_ABIERTOS.has(t.estado)).map(t => hoy - t.dia);
   const finalizados = pasados.filter(t => t.estado === 'finalizado').length;
+  const minutos = ts.map(t => t.atrasoMin).filter((m): m is number => m !== null).map(m => Math.max(0, m));
   return {
     total: ts.length,
     porEstado: [...conteo.entries()].map(([estado, cantidad]) => ({ estado, cantidad })),
@@ -421,6 +449,10 @@ export function resumirTurnos(ts: TurnoAnalizado[], hoy: number): ResumenTurnos 
     sinCerrar: atrasos.length,
     atrasoProm: promedio(atrasos),
     atrasoMax: atrasos.length ? Math.max(...atrasos) : 0,
+    conInicio: minutos.length,
+    atrasoMinProm: promedio(minutos),
+    atrasoMinMax: minutos.length ? Math.max(...minutos) : 0,
+    pctPuntuales: minutos.length ? minutos.filter(m => m <= TOLERANCIA_PUNTUAL_MIN).length / minutos.length : null,
   };
 }
 
@@ -492,4 +524,117 @@ export function resumenPorTerapeuta(
       ...resumirCobranza(fs.filter(x => x.terapeutaId === id)),
     }))
     .sort((a, b) => b.facturado - a.facturado);
+}
+
+// ---------- Comparaciones (mes anterior, año anterior) ----------
+
+// Mismo día, `n` años después; el 29 de febrero cae en el 28 si el otro año no es bisiesto.
+const sumarAnios = (dia: number, n: number): number => {
+  const f = new Date(dia * DIA_MS);
+  const y = f.getUTCFullYear() + n, m = f.getUTCMonth();
+  const ultimo = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return Date.UTC(y, m, Math.min(f.getUTCDate(), ultimo)) / DIA_MS;
+};
+
+export const unAnioAntes = (dia: number) => sumarAnios(dia, -1);
+
+// Las facturas tal como estaban en `corte`: lo cobrado después cuenta como pendiente.
+// Sirve para comparar cohortes con el mismo tiempo para cobrarse (si no, las recientes parecen peores).
+export function alCorte(fs: FacturaAnalizada[], corte: number): FacturaAnalizada[] {
+  return fs.map(f => {
+    if (!f.pagada || f.pago === null || f.pago <= corte) return f;
+    return {
+      ...f, pagada: false, pago: null, diasCobro: null,
+      diasAtraso: Math.max(0, corte - f.vencimiento),
+      estado: corte > f.vencimiento ? 'vencida' : 'pendiente',
+    };
+  });
+}
+
+const finDeMes = (dia: number): number => {
+  const f = new Date(dia * DIA_MS);
+  return Date.UTC(f.getUTCFullYear(), f.getUTCMonth() + 1, 0) / DIA_MS;
+};
+
+// El mismo rango, un año antes. Sin rango (todo el historial) no hay contra qué comparar.
+export function rangoAnioAnterior(r: Rango): Rango | null {
+  if (r.desde === null || r.hasta === null) return null;
+  return { desde: sumarAnios(r.desde, -1), hasta: sumarAnios(r.hasta, -1) };
+}
+
+// Ventanas de comparación cortadas al mismo día, para que un mes en curso no se compare con uno completo.
+export function ventanasComparacion(hoy: number) {
+  const anio = new Date(hoy * DIA_MS).getUTCFullYear();
+  const inicio = inicioDeMes(hoy);
+  const transcurridos = hoy - inicio; // 0 el día 1
+  const inicioAnterior = inicioDeMes(hoy, 1);
+  const inicioAnioAnt = sumarAnios(inicio, -1);
+  return {
+    diaDelMes: transcurridos + 1,
+    diasDelMes: finDeMes(hoy) - inicio + 1,
+    mes: { desde: inicio, hasta: hoy },
+    mesAnterior: { desde: inicioAnterior, hasta: Math.min(inicioAnterior + transcurridos, inicio - 1) },
+    mesAnioAnterior: { desde: inicioAnioAnt, hasta: Math.min(inicioAnioAnt + transcurridos, finDeMes(inicioAnioAnt)) },
+    anio: { desde: Date.UTC(anio, 0, 1) / DIA_MS, hasta: hoy },
+    anioAnterior: { desde: Date.UTC(anio - 1, 0, 1) / DIA_MS, hasta: sumarAnios(hoy, -1) },
+  };
+}
+
+export interface Metricas {
+  facturado: number;
+  facturas: number;
+  sesiones: number;
+  porSesion: number | null;
+  cobradoEnPeriodo: number; // pagos recibidos dentro de la ventana (por fecha de pago)
+  diasPromCobro: number | null;
+  pctEnPlazo: number | null;
+  turnos: number;
+  pctFinalizados: number | null;
+  pctCancelados: number | null;
+  atrasoMinProm: number | null;
+  pctPuntuales: number | null;
+  horas: number;
+}
+
+// `fs` y `ts` ya filtrados por obra social / terapeuta / estado, pero NO por período.
+export function metricas(fs: FacturaAnalizada[], ts: TurnoAnalizado[], v: Rango, hoy: number): Metricas {
+  // Cohorte emitida en la ventana, vista al final de la ventana (mismo tiempo para cobrarse en todas).
+  const facturasV = alCorte(fs.filter(f => enRango(f.emision, v)), v.hasta ?? Infinity);
+  const c = resumirCobranza(facturasV);
+  const t = resumirTurnos(ts.filter(x => enRango(x.dia, v)), hoy);
+  return {
+    facturado: c.facturado,
+    facturas: c.cantidad,
+    sesiones: c.sesiones,
+    porSesion: c.sesiones ? c.facturado / c.sesiones : null,
+    cobradoEnPeriodo: fs.filter(f => f.pago !== null && enRango(f.pago, v)).reduce((s, f) => s + f.monto, 0),
+    diasPromCobro: c.diasPromCobro,
+    pctEnPlazo: c.pctEnPlazo,
+    turnos: t.total,
+    pctFinalizados: t.pctFinalizados,
+    pctCancelados: t.pctCancelados,
+    atrasoMinProm: t.atrasoMinProm,
+    pctPuntuales: t.pctPuntuales,
+    horas: t.horasAgendadas,
+  };
+}
+
+export type MetricaMensual = 'facturado' | 'cobrado' | 'sesiones' | 'turnos';
+
+// Valor de cada mes calendario (enero..diciembre) de un año. El mes en curso y los futuros quedan en null:
+// solo se comparan meses completos (el mes en curso se compara cortado al mismo día en la tabla).
+export function serieMensual(fs: FacturaAnalizada[], ts: TurnoAnalizado[], anio: number, metrica: MetricaMensual, hoy: number): (number | null)[] {
+  const valores: (number | null)[] = Array(12).fill(0);
+  const mesDeDia = (dia: number) => {
+    const f = new Date(dia * DIA_MS);
+    return f.getUTCFullYear() === anio ? f.getUTCMonth() : -1;
+  };
+  const sumar = (dia: number, x: number) => { const m = mesDeDia(dia); if (m >= 0) valores[m] = (valores[m] ?? 0) + x; };
+  if (metrica === 'facturado') fs.forEach(f => sumar(f.emision, f.monto));
+  if (metrica === 'sesiones') fs.forEach(f => sumar(f.emision, f.sesiones));
+  if (metrica === 'cobrado') fs.forEach(f => { if (f.pago !== null) sumar(f.pago, f.monto); });
+  if (metrica === 'turnos') ts.forEach(t => sumar(t.dia, 1));
+  const hoyF = new Date(hoy * DIA_MS);
+  if (hoyF.getUTCFullYear() === anio) for (let m = hoyF.getUTCMonth(); m < 12; m++) valores[m] = null;
+  return valores;
 }

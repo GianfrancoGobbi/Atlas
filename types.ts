@@ -55,6 +55,7 @@ export interface Turno {
   estado: 'pendiente' | 'confirmado' | 'cancelado' | 'finalizado'; // Aligned with DDL: 'confirmado' instead of 'programado', 'finalizado' instead of 'completado'
   notasPaciente?: string;
   notasTerapeuta?: string; // Part of clinical history
+  inicioReal?: string | null; // Hora real de inicio de la sesión (hora local, como fechaHoraInicio)
 }
 
 export interface Pago {

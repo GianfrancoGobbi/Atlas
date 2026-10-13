@@ -32,7 +32,7 @@ export const reportesService = {
     const [facturas, obrasSociales, turnos, terapeutas] = await Promise.all([
       traerTodo<FacturaRaw>('facturas', 'id, terapeuta_id, obra_social_id, monto, estado, fecha_generada, fecha_pago, sesiones'),
       traerTodo<ObraSocialRaw>('obras_sociales', 'id, nombre, dias_vencimiento'),
-      traerTodo<TurnoRaw>('turnos', 'id, terapeuta_id, fecha_hora_inicio, fecha_hora_fin, estado'),
+      traerTodo<TurnoRaw>('turnos', 'id, terapeuta_id, fecha_hora_inicio, fecha_hora_fin, estado, inicio_real'),
       supabase
         .from('usuarios_perfil')
         .select('id, nombre, apellido')

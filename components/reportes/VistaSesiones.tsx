@@ -6,9 +6,10 @@ import { ColumnaTabla, TablaDatos } from '../charts/TablaDatos';
 import { FilaTooltip, IconoEstado, Indicador, SinDatos, TarjetaGrafico } from '../charts/base';
 import { fmt, tema } from '../charts/tema';
 import {
-  cobranzaPorMes, DIAS_SEMANA, FacturaAnalizada, FilaTurnosTerapeuta, grillaTurnos, PersonaRaw, proximosTurnos, Rango,
+  cobranzaPorMes, DIAS_SEMANA, TOLERANCIA_PUNTUAL_MIN, FacturaAnalizada, FilaTurnosTerapeuta, grillaTurnos, PersonaRaw, proximosTurnos, Rango,
   resumenPorObraSocial, resumirTurnos, TurnoAnalizado, turnosPorTerapeuta,
 } from '../../utils/reportes';
+import { deltaPct, deltaPuntos, deltaValor } from '../../utils/comparaciones';
 
 export type SeccionSesiones = 'sesiones' | 'turnos';
 
@@ -20,6 +21,8 @@ interface Props {
   facturas: FacturaAnalizada[];
   turnos: TurnoAnalizado[]; // del período
   turnosTodos: TurnoAnalizado[]; // sin filtro de período (para los próximos)
+  facturasAnioAnterior: FacturaAnalizada[] | null; // mismo período, un año antes
+  turnosAnioAnterior: TurnoAnalizado[] | null;
   personas: PersonaRaw[];
   hoy: number;
   rango: Rango;
@@ -30,7 +33,7 @@ interface Props {
 }
 
 export const VistaSesiones: React.FC<Props> = ({
-  seccion, facturas, turnos, turnosTodos, personas, hoy, rango, obrasSeleccionadas, onAlternarObraSocial, avisoFiltrosNoAplican, actualizando,
+  seccion, facturas, turnos, turnosTodos, facturasAnioAnterior, turnosAnioAnterior, personas, hoy, rango, obrasSeleccionadas, onAlternarObraSocial, avisoFiltrosNoAplican, actualizando,
 }) => {
   const meses = useMemo(() => cobranzaPorMes(facturas, rango), [facturas, rango]);
   const porObra = useMemo(
@@ -38,6 +41,10 @@ export const VistaSesiones: React.FC<Props> = ({
     [facturas],
   );
   const resumenTurnos = useMemo(() => resumirTurnos(turnos, hoy), [turnos, hoy]);
+  const turnosAA = useMemo(() => (turnosAnioAnterior ? resumirTurnos(turnosAnioAnterior, hoy) : null), [turnosAnioAnterior, hoy]);
+  const sesionesAA = facturasAnioAnterior ? facturasAnioAnterior.reduce((s, f) => s + f.sesiones, 0) : null;
+  const facturadoAA = facturasAnioAnterior ? facturasAnioAnterior.reduce((s, f) => s + f.monto, 0) : null;
+  const VS = 'vs mismo período del año anterior';
   const porTerapeuta = useMemo(() => turnosPorTerapeuta(turnos, turnosTodos, personas, hoy), [turnos, turnosTodos, personas, hoy]);
   const grilla = useMemo(() => grillaTurnos(turnos), [turnos]);
 
@@ -50,37 +57,51 @@ export const VistaSesiones: React.FC<Props> = ({
     const columnasTerapeuta: ColumnaTabla<FilaTurnosTerapeuta>[] = [
       { clave: 'nombre', titulo: 'Terapeuta', valor: t => t.nombre },
       { clave: 'total', titulo: 'Turnos', valor: t => t.total, mostrar: t => fmt.entero(t.total), numerica: true },
-      { clave: 'fin', titulo: 'Finalizados', valor: t => t.pctFinalizados, mostrar: t => fmt.pct(t.pctFinalizados), numerica: true },
-      { clave: 'canc', titulo: 'Cancelados', valor: t => t.pctCancelados, mostrar: t => fmt.pct(t.pctCancelados), numerica: true },
+      { clave: 'fin', titulo: 'Finaliz.', valor: t => t.pctFinalizados, mostrar: t => fmt.pct(t.pctFinalizados), numerica: true },
+      { clave: 'canc', titulo: 'Cancel.', valor: t => t.pctCancelados, mostrar: t => fmt.pct(t.pctCancelados), numerica: true },
       { clave: 'abiertos', titulo: 'Sin cerrar', valor: t => t.sinCerrar, mostrar: t => (t.sinCerrar ? fmt.entero(t.sinCerrar) : '—'), numerica: true },
-      { clave: 'atraso', titulo: 'Atraso prom.', valor: t => t.atrasoProm, mostrar: t => (t.atrasoProm === null ? '—' : `${fmt.entero(t.atrasoProm)} d`), numerica: true },
+      { clave: 'atraso', titulo: 'Atraso', valor: t => t.atrasoMinProm, mostrar: t => (t.atrasoMinProm === null ? '—' : `${fmt.entero(t.atrasoMinProm)} min`), numerica: true },
+      { clave: 'puntuales', titulo: 'Puntuales', valor: t => t.pctPuntuales, mostrar: t => fmt.pct(t.pctPuntuales), numerica: true },
       { clave: 'prox', titulo: 'Próx. 30 d', valor: t => t.proximos, mostrar: t => fmt.entero(t.proximos), numerica: true },
     ];
     return (
       <div className="flex h-full flex-col gap-3">
         <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <Indicador etiqueta="Turnos agendados" valor={fmt.entero(resumenTurnos.total)} detalle={`${fmt.decimal(resumenTurnos.horasAgendadas)} ${resumenTurnos.horasAgendadas === 1 ? 'hora' : 'horas'}`} />
+          <Indicador
+            etiqueta="Turnos agendados"
+            valor={fmt.entero(resumenTurnos.total)}
+            delta={turnosAA ? deltaPct(resumenTurnos.total, turnosAA.total) : undefined}
+            deltaEtiqueta={VS}
+            detalle={`${fmt.decimal(resumenTurnos.horasAgendadas)} ${resumenTurnos.horasAgendadas === 1 ? 'hora' : 'horas'}`} />
           <Indicador
             etiqueta="Finalizados"
             icono={<IconoEstado tipo="bien" />}
             valor={fmt.pct(resumenTurnos.pctFinalizados)}
+            delta={turnosAA ? deltaPuntos(resumenTurnos.pctFinalizados, turnosAA.pctFinalizados) : undefined}
+            deltaEtiqueta={VS}
             detalle={`${fmt.entero(resumenTurnos.finalizados)} de ${fmt.entero(resumenTurnos.pasados)} ya pasados`}
           />
           <Indicador
             etiqueta="Cancelados"
             valor={fmt.pct(resumenTurnos.pctCancelados)}
+            delta={turnosAA ? deltaPuntos(resumenTurnos.pctCancelados, turnosAA.pctCancelados, false) : undefined}
+            deltaEtiqueta={VS}
             detalle={avisoFiltrosNoAplican ? 'Obra social y pago no aplican a turnos' : 'Del total del período'}
           />
           <Indicador
             etiqueta="Sin cerrar"
             icono={<IconoEstado tipo="alerta" />}
             valor={fmt.entero(resumenTurnos.sinCerrar)}
-            detalle="Fecha pasada sin registrar"
+            detalle={resumenTurnos.sinCerrar ? `Hace ${fmt.entero(resumenTurnos.atrasoProm ?? 0)} días en promedio` : 'Fecha pasada sin registrar'}
           />
           <Indicador
-            etiqueta="Atraso promedio"
-            valor={resumenTurnos.atrasoProm === null ? '—' : `${fmt.entero(resumenTurnos.atrasoProm)} días`}
-            detalle={resumenTurnos.sinCerrar ? `Máximo ${fmt.entero(resumenTurnos.atrasoMax)} días` : 'No hay turnos sin cerrar'}
+            etiqueta="Atraso al empezar"
+            valor={resumenTurnos.atrasoMinProm === null ? '—' : `${fmt.entero(resumenTurnos.atrasoMinProm)} min`}
+            delta={turnosAA ? deltaValor(resumenTurnos.atrasoMinProm, turnosAA.atrasoMinProm, 'min') : undefined}
+            deltaEtiqueta={VS}
+            detalle={resumenTurnos.conInicio
+              ? `${fmt.pct(resumenTurnos.pctPuntuales)} puntuales (≤ ${TOLERANCIA_PUNTUAL_MIN} min)`
+              : 'Sin registros: se cargan con "Empezó ahora"'}
           />
           <Indicador etiqueta="Próximos 30 días" valor={fmt.entero(proximosTurnos(turnosTodos, hoy))} detalle="Agendados desde hoy" />
         </div>
@@ -117,7 +138,7 @@ export const VistaSesiones: React.FC<Props> = ({
           <TarjetaGrafico
             className="lg:col-span-2"
             titulo="Turnos por terapeuta"
-            subtitulo="Sin cerrar: turnos con fecha pasada que siguen pendientes o confirmados"
+            subtitulo={`Atraso: minutos promedio entre el horario del turno y el inicio real · Puntuales: hasta ${TOLERANCIA_PUNTUAL_MIN} min`}
             actualizando={actualizando}
             cuerpoClassName="min-h-[14rem]"
           >
@@ -139,7 +160,13 @@ export const VistaSesiones: React.FC<Props> = ({
   return (
     <div className="flex h-full flex-col gap-3">
       <div className="grid shrink-0 grid-cols-3 gap-3">
-        <Indicador etiqueta="Sesiones facturadas" valor={fmt.entero(totalSesiones)} detalle={`${fmt.entero(facturas.length)} facturas`} />
+        <Indicador
+          etiqueta="Sesiones facturadas"
+          valor={fmt.entero(totalSesiones)}
+          delta={deltaPct(totalSesiones, sesionesAA)}
+          deltaEtiqueta={VS}
+          detalle={`${fmt.entero(facturas.length)} facturas`}
+        />
         <Indicador
           etiqueta="Sesiones por mes"
           valor={mesesConSesiones ? fmt.decimal(totalSesiones / mesesConSesiones) : '—'}
@@ -148,6 +175,8 @@ export const VistaSesiones: React.FC<Props> = ({
         <Indicador
           etiqueta="Facturado por sesión"
           valor={totalSesiones ? fmt.moneda(totalFacturado / totalSesiones) : '—'}
+          delta={totalSesiones && sesionesAA && facturadoAA !== null ? deltaPct(totalFacturado / totalSesiones, facturadoAA / sesionesAA) : undefined}
+          deltaEtiqueta={VS}
           detalle="Promedio del período"
         />
       </div>

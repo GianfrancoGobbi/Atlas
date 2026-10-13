@@ -1,5 +1,6 @@
 import React, { ReactNode, useEffect, useRef, useState } from 'react';
 import { tema } from './tema';
+import { claseDelta, Delta } from '../../utils/comparaciones';
 
 // Tamaño disponible del contenedor: los gráficos se dibujan en SVG a esa medida.
 export function useTamano<T extends HTMLElement>(): [React.RefObject<T | null>, { ancho: number; alto: number }] {
@@ -87,8 +88,9 @@ export const TarjetaGrafico: React.FC<{
   actualizando?: boolean;
   className?: string;
   cuerpoClassName?: string; // alto mínimo en celular
+  acciones?: ReactNode; // controles propios de la tarjeta (p. ej., elegir la métrica)
   children: ReactNode;
-}> = ({ titulo, subtitulo, leyenda, tabla, actualizando, className = '', cuerpoClassName = 'min-h-[15rem]', children }) => {
+}> = ({ titulo, subtitulo, leyenda, tabla, actualizando, className = '', cuerpoClassName = 'min-h-[15rem]', acciones, children }) => {
   const [verTabla, setVerTabla] = useState(false);
   return (
     <section className={`flex min-h-0 min-w-0 flex-col rounded-xl border border-black/5 bg-white p-3 shadow-sm lg:p-4 ${className}`}>
@@ -97,6 +99,8 @@ export const TarjetaGrafico: React.FC<{
           <h3 className="text-sm font-semibold text-slate-900">{titulo}</h3>
           {subtitulo && <p className="mt-0.5 text-xs text-slate-500">{subtitulo}</p>}
         </div>
+        <div className="flex shrink-0 items-center gap-1">
+        {acciones}
         {tabla && (
           <button
             type="button"
@@ -107,6 +111,7 @@ export const TarjetaGrafico: React.FC<{
             {verTabla ? 'Ver gráfico' : 'Ver tabla'}
           </button>
         )}
+        </div>
       </header>
       {leyenda && !verTabla && <div className="mb-2 shrink-0">{leyenda}</div>}
       <div className={`relative flex-1 transition-opacity duration-200 lg:min-h-0 ${cuerpoClassName} ${actualizando ? 'opacity-50' : ''}`}>
@@ -123,10 +128,19 @@ export const Indicador: React.FC<{
   valor: ReactNode;
   detalle?: ReactNode;
   icono?: ReactNode;
-}> = ({ etiqueta, valor, detalle, icono }) => (
+  delta?: Delta; // variación contra el período de referencia
+  deltaEtiqueta?: string; // p. ej., "vs año ant."
+}> = ({ etiqueta, valor, detalle, icono, delta, deltaEtiqueta }) => (
   <div className="min-w-0 rounded-xl border border-black/5 bg-white px-3 py-2.5 shadow-sm">
     <div className="flex items-center gap-1.5 truncate text-xs text-slate-500">{icono}{etiqueta}</div>
-    <div className="mt-0.5 truncate text-xl font-semibold text-slate-900">{valor}</div>
+    <div className="mt-0.5 flex items-baseline gap-2">
+      <span className="truncate text-xl font-semibold text-slate-900">{valor}</span>
+      {delta && (
+        <span className={`shrink-0 whitespace-nowrap text-[11px] font-medium ${claseDelta(delta)}`} title={deltaEtiqueta}>
+          {delta.texto}
+        </span>
+      )}
+    </div>
     {detalle && <div className="truncate text-[11px] text-slate-500">{detalle}</div>}
   </div>
 );
