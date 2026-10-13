@@ -56,6 +56,7 @@ export interface Turno {
   notasPaciente?: string;
   notasTerapeuta?: string; // Part of clinical history
   inicioReal?: string | null; // Hora real de inicio de la sesión (hora local, como fechaHoraInicio)
+  finReal?: string | null; // Hora real de fin de la sesión
 }
 
 export interface Pago {

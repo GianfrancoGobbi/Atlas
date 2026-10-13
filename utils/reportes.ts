@@ -26,6 +26,7 @@ export interface TurnoRaw {
   fecha_hora_fin: string | null;
   estado: string | null;
   inicio_real?: string | null;
+  fin_real?: string | null;
 }
 
 export interface PersonaRaw {
@@ -350,6 +351,8 @@ export interface TurnoAnalizado {
   duracionMin: number | null;
   estado: string;
   atrasoMin: number | null; // inicio real − horario del turno (negativo = empezó antes); null si no se registró
+  duracionRealMin: number | null; // fin real − inicio real
+  extraMin: number | null; // duración real − duración pactada (negativo = duró menos)
 }
 
 const minutosDe = (s: string) => Number(s.slice(11, 13)) * 60 + Number(s.slice(14, 16));
@@ -394,6 +397,12 @@ export function analizarTurnos(filas: TurnoRaw[]): TurnoAnalizado[] {
           const m = minutosEntre(t.fecha_hora_inicio, t.inicio_real);
           return Math.abs(m) > ATRASO_MAX_VALIDO_MIN ? null : m;
         })(),
+        ...(() => {
+          if (!t.inicio_real || !t.fin_real) return { duracionRealMin: null, extraMin: null };
+          const real = minutosEntre(t.inicio_real, t.fin_real);
+          if (real <= 0 || real > ATRASO_MAX_VALIDO_MIN) return { duracionRealMin: null, extraMin: null };
+          return { duracionRealMin: real, extraMin: duracionMin === null ? null : real - duracionMin };
+        })(),
       };
     });
 }
@@ -427,6 +436,11 @@ export interface ResumenTurnos {
   atrasoMinProm: number | null; // minutos promedio de atraso al empezar (los que empezaron antes cuentan como 0)
   atrasoMinMax: number;
   pctPuntuales: number | null; // empezaron con hasta TOLERANCIA_PUNTUAL_MIN minutos de atraso
+  conDuracionReal: number; // turnos con inicio y fin reales
+  duracionRealProm: number | null;
+  duracionPactadaProm: number | null; // de esos mismos turnos
+  extraMinProm: number | null; // cuánto más (o menos) duran que lo pactado, en promedio
+  pctExcedidos: number | null; // duraron más de TOLERANCIA_PUNTUAL_MIN minutos de lo pactado
 }
 
 export function resumirTurnos(ts: TurnoAnalizado[], hoy: number): ResumenTurnos {
@@ -453,6 +467,17 @@ export function resumirTurnos(ts: TurnoAnalizado[], hoy: number): ResumenTurnos 
     atrasoMinProm: promedio(minutos),
     atrasoMinMax: minutos.length ? Math.max(...minutos) : 0,
     pctPuntuales: minutos.length ? minutos.filter(m => m <= TOLERANCIA_PUNTUAL_MIN).length / minutos.length : null,
+    ...(() => {
+      const conReal = ts.filter(x => x.extraMin !== null && x.duracionRealMin !== null && x.duracionMin !== null);
+      const extras = conReal.map(x => x.extraMin as number);
+      return {
+        conDuracionReal: conReal.length,
+        duracionRealProm: promedio(conReal.map(x => x.duracionRealMin as number)),
+        duracionPactadaProm: promedio(conReal.map(x => x.duracionMin as number)),
+        extraMinProm: promedio(extras),
+        pctExcedidos: extras.length ? extras.filter(e => e > TOLERANCIA_PUNTUAL_MIN).length / extras.length : null,
+      };
+    })(),
   };
 }
 
@@ -593,6 +618,7 @@ export interface Metricas {
   pctCancelados: number | null;
   atrasoMinProm: number | null;
   pctPuntuales: number | null;
+  extraMinProm: number | null;
   horas: number;
 }
 
@@ -615,6 +641,7 @@ export function metricas(fs: FacturaAnalizada[], ts: TurnoAnalizado[], v: Rango,
     pctCancelados: t.pctCancelados,
     atrasoMinProm: t.atrasoMinProm,
     pctPuntuales: t.pctPuntuales,
+    extraMinProm: t.extraMinProm,
     horas: t.horasAgendadas,
   };
 }

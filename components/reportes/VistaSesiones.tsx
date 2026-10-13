@@ -58,15 +58,15 @@ export const VistaSesiones: React.FC<Props> = ({
       { clave: 'nombre', titulo: 'Terapeuta', valor: t => t.nombre },
       { clave: 'total', titulo: 'Turnos', valor: t => t.total, mostrar: t => fmt.entero(t.total), numerica: true },
       { clave: 'fin', titulo: 'Finaliz.', valor: t => t.pctFinalizados, mostrar: t => fmt.pct(t.pctFinalizados), numerica: true },
-      { clave: 'canc', titulo: 'Cancel.', valor: t => t.pctCancelados, mostrar: t => fmt.pct(t.pctCancelados), numerica: true },
       { clave: 'abiertos', titulo: 'Sin cerrar', valor: t => t.sinCerrar, mostrar: t => (t.sinCerrar ? fmt.entero(t.sinCerrar) : '—'), numerica: true },
       { clave: 'atraso', titulo: 'Atraso', valor: t => t.atrasoMinProm, mostrar: t => (t.atrasoMinProm === null ? '—' : `${fmt.entero(t.atrasoMinProm)} min`), numerica: true },
       { clave: 'puntuales', titulo: 'Puntuales', valor: t => t.pctPuntuales, mostrar: t => fmt.pct(t.pctPuntuales), numerica: true },
+      { clave: 'extra', titulo: 'Extra', valor: t => t.extraMinProm, mostrar: t => (t.extraMinProm === null ? '—' : `${t.extraMinProm > 0 ? '+' : ''}${fmt.entero(t.extraMinProm)} min`), numerica: true },
       { clave: 'prox', titulo: 'Próx. 30 d', valor: t => t.proximos, mostrar: t => fmt.entero(t.proximos), numerica: true },
     ];
     return (
       <div className="flex h-full flex-col gap-3">
-        <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
           <Indicador
             etiqueta="Turnos agendados"
             valor={fmt.entero(resumenTurnos.total)}
@@ -96,12 +96,23 @@ export const VistaSesiones: React.FC<Props> = ({
           />
           <Indicador
             etiqueta="Atraso al empezar"
-            valor={resumenTurnos.atrasoMinProm === null ? '—' : `${fmt.entero(resumenTurnos.atrasoMinProm)} min`}
+            valor={resumenTurnos.atrasoMinProm === null ? <span className="text-base font-medium text-slate-400">Sin datos</span> : `${fmt.entero(resumenTurnos.atrasoMinProm)} min`}
             delta={turnosAA ? deltaValor(resumenTurnos.atrasoMinProm, turnosAA.atrasoMinProm, 'min') : undefined}
             deltaEtiqueta={VS}
             detalle={resumenTurnos.conInicio
               ? `${fmt.pct(resumenTurnos.pctPuntuales)} puntuales (≤ ${TOLERANCIA_PUNTUAL_MIN} min)`
-              : 'Sin registros: se cargan con "Empezó ahora"'}
+              : 'Falta cargar el inicio real en los turnos'}
+          />
+          <Indicador
+            etiqueta="Tiempo extra por sesión"
+            valor={resumenTurnos.extraMinProm === null
+              ? <span className="text-base font-medium text-slate-400">Sin datos</span>
+              : `${resumenTurnos.extraMinProm > 0 ? '+' : ''}${fmt.entero(resumenTurnos.extraMinProm)} min`}
+            delta={turnosAA ? deltaValor(resumenTurnos.extraMinProm, turnosAA.extraMinProm, 'min') : undefined}
+            deltaEtiqueta={VS}
+            detalle={resumenTurnos.conDuracionReal
+              ? `Duran ${fmt.entero(resumenTurnos.duracionRealProm ?? 0)} min vs ${fmt.entero(resumenTurnos.duracionPactadaProm ?? 0)} pactados`
+              : 'Falta cargar inicio y fin reales'}
           />
           <Indicador etiqueta="Próximos 30 días" valor={fmt.entero(proximosTurnos(turnosTodos, hoy))} detalle="Agendados desde hoy" />
         </div>
@@ -138,7 +149,7 @@ export const VistaSesiones: React.FC<Props> = ({
           <TarjetaGrafico
             className="lg:col-span-2"
             titulo="Turnos por terapeuta"
-            subtitulo={`Atraso: minutos promedio entre el horario del turno y el inicio real · Puntuales: hasta ${TOLERANCIA_PUNTUAL_MIN} min`}
+            subtitulo={`Atraso: inicio real − horario del turno · Extra: duración real − pactada · Puntuales: hasta ${TOLERANCIA_PUNTUAL_MIN} min de atraso`}
             actualizando={actualizando}
             cuerpoClassName="min-h-[14rem]"
           >

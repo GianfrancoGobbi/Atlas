@@ -35,6 +35,7 @@ const DEFINICIONES: DefMetrica[] = [
   { clave: 'pctCancelados', etiqueta: 'Turnos cancelados', formato: v => fmt.pct(v), delta: (a, b) => deltaPuntos(a, b, false) },
   { clave: 'atrasoMinProm', etiqueta: 'Atraso al empezar', formato: nulo(v => `${fmt.entero(v)} min`), delta: (a, b) => deltaValor(a, b, 'min') },
   { clave: 'pctPuntuales', etiqueta: 'Turnos puntuales', formato: v => fmt.pct(v), delta: (a, b) => deltaPuntos(a, b) },
+  { clave: 'extraMinProm', etiqueta: 'Tiempo extra por sesión', formato: nulo(v => `${v > 0 ? '+' : ''}${fmt.entero(v)} min`), delta: (a, b) => deltaValor(a, b, 'min') },
   { clave: 'horas', etiqueta: 'Horas agendadas', formato: nulo(fmt.entero), delta: (a, b) => deltaPct(a, b) },
 ];
 

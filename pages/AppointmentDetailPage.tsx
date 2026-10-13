@@ -43,6 +43,7 @@ export const AppointmentDetailPage: React.FC = () => {
   const [editableFechaHoraInicio, setEditableFechaHoraInicio] = useState<string>('');
   const [editableFechaHoraFin, setEditableFechaHoraFin] = useState<string>('');
   const [horaInicioReal, setHoraInicioReal] = useState<string>(''); // HH:MM
+  const [horaFinReal, setHoraFinReal] = useState<string>('');
   const [isSavingInicio, setIsSavingInicio] = useState<boolean>(false);
   const [inicioError, setInicioError] = useState<string | null>(null);
 
@@ -94,6 +95,7 @@ export const AppointmentDetailPage: React.FC = () => {
       setEditableFechaHoraInicio(formattedEditableStart);
       setEditableFechaHoraFin(formattedEditableEnd);
       setHoraInicioReal(fetchedAppointment.inicioReal?.slice(11, 16) ?? '');
+      setHoraFinReal(fetchedAppointment.finReal?.slice(11, 16) ?? '');
 
       let profileToFetchId: string | null = null;
       if (currentUserRole === UserRole.TERAPEUTA) {
@@ -152,15 +154,16 @@ export const AppointmentDetailPage: React.FC = () => {
     }
 
     try {
-      const updates: Partial<Pick<Turno, 'estado' | 'notasTerapeuta' | 'fechaHoraInicio' | 'fechaHoraFin' | 'inicioReal'>> = {
+      const updates: Partial<Pick<Turno, 'estado' | 'notasTerapeuta' | 'fechaHoraInicio' | 'fechaHoraFin' | 'inicioReal' | 'finReal'>> = {
         estado: selectedStatus as Turno['estado'],
         notasTerapeuta: annotations,
         fechaHoraInicio: newFechaHoraInicioLocalString, // Send local time string
         fechaHoraFin: newFechaHoraFinLocalString,     // Send local time string
       };
-      // Si se reprograma un turno que ya tiene inicio real, el inicio se corre igual: conserva el mismo atraso.
+      // Si se reprograma un turno que ya tiene horario real, ese horario se corre igual: conserva el mismo atraso y duración.
       const corrimiento = minutosEntre(appointment.fechaHoraInicio, newFechaHoraInicioLocalString);
       if (appointment.inicioReal && corrimiento !== 0) updates.inicioReal = sumarMinutos(appointment.inicioReal, corrimiento);
+      if (appointment.finReal && corrimiento !== 0) updates.finReal = sumarMinutos(appointment.finReal, corrimiento);
       // appointmentService needs to know these strings are local and Supabase will handle them
       const updatedAppointment = await appointmentService.updateAppointment(turnoId, updates);
       
@@ -188,24 +191,33 @@ export const AppointmentDetailPage: React.FC = () => {
     }
   };
 
-  // ---------- Inicio real de la sesión (para medir el atraso en minutos) ----------
+  // ---------- Horario real de la sesión (atraso al empezar y tiempo extra) ----------
   // Se guarda como hora local 'AAAA-MM-DDTHH:MM:SS', igual que fecha_hora_inicio.
   const ahoraLocal = () => formatUTCISOToDateTimeLocalInTargetTimezone(new Date().toISOString(), TARGET_TIMEZONE_IANA); // AAAA-MM-DDTHH:MM
 
-  const guardarInicioReal = async (valor: string | null) => {
-    if (!turnoId || currentUserRole !== UserRole.TERAPEUTA) return;
-    setIsSavingInicio(true);
+  const guardarHorarioReal = async (campo: 'inicioReal' | 'finReal', valor: string | null) => {
+    if (!turnoId || currentUserRole !== UserRole.TERAPEUTA || !appointment) return;
     setInicioError(null);
     setSuccessMessage(null);
+    // El fin tiene que quedar después del inicio.
+    const inicio = campo === 'inicioReal' ? valor : appointment.inicioReal;
+    const fin = campo === 'finReal' ? valor : appointment.finReal;
+    if (inicio && fin && minutosEntre(inicio, fin) <= 0) {
+      setInicioError('La hora de fin tiene que ser posterior a la de inicio.');
+      return;
+    }
+    setIsSavingInicio(true);
     try {
-      const actualizado = await appointmentService.updateAppointment(turnoId, { inicioReal: valor });
+      const actualizado = await appointmentService.updateAppointment(turnoId, { [campo]: valor });
       if (actualizado) {
         setAppointment(actualizado);
         setHoraInicioReal(actualizado.inicioReal?.slice(11, 16) ?? '');
-        setSuccessMessage(valor ? 'Inicio de la sesión registrado.' : 'Se borró el inicio registrado.');
+        setHoraFinReal(actualizado.finReal?.slice(11, 16) ?? '');
+        const que = campo === 'inicioReal' ? 'inicio' : 'fin';
+        setSuccessMessage(valor ? `Se registró el ${que} de la sesión.` : `Se borró el ${que} registrado.`);
       }
     } catch (e: any) {
-      setInicioError(e.message || 'No se pudo guardar el inicio de la sesión.');
+      setInicioError(e.message || 'No se pudo guardar el horario de la sesión.');
     } finally {
       setIsSavingInicio(false);
     }
@@ -379,49 +391,74 @@ export const AppointmentDetailPage: React.FC = () => {
           {(() => {
             const fechaTurno = appointment.fechaHoraInicio.slice(0, 10);
             const esHoy = ahoraLocal().slice(0, 10) === fechaTurno;
+            const pactadaMin = minutosEntre(appointment.fechaHoraInicio, appointment.fechaHoraFin);
             const atraso = appointment.inicioReal ? minutosEntre(appointment.fechaHoraInicio, appointment.inicioReal) : null;
-            const textoAtraso = atraso === null ? null
-              : atraso > TOLERANCIA_PUNTUAL_MIN ? `${atraso} min tarde`
-              : atraso < 0 ? `${-atraso} min antes`
-              : atraso === 0 ? 'a horario' : `a horario (${atraso} min)`;
-            return (
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <p className="text-sm font-medium text-brand-gray">Inicio real de la sesión</p>
-                <p className="text-xs text-slate-500">
-                  {appointment.inicioReal
-                    ? <>Empezó a las <span className="font-semibold text-brand-gray">{appointment.inicioReal.slice(11, 16)}</span> · {textoAtraso}</>
-                    : 'Sin registrar. Se usa para medir el atraso en minutos en los tableros.'}
-                </p>
-                {inicioError && <p className="mt-2 text-sm text-red-600" role="alert">{inicioError}</p>}
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  {esHoy && !appointment.inicioReal && (
-                    <Button size="sm" onClick={() => guardarInicioReal(`${ahoraLocal()}:00`)} isLoading={isSavingInicio}>Empezó ahora</Button>
+            const realMin = appointment.inicioReal && appointment.finReal ? minutosEntre(appointment.inicioReal, appointment.finReal) : null;
+            const extra = realMin === null ? null : realMin - pactadaMin;
+            const textoAtraso = atraso === null ? ''
+              : atraso > TOLERANCIA_PUNTUAL_MIN ? ` · ${atraso} min tarde`
+              : atraso < 0 ? ` · ${-atraso} min antes`
+              : atraso === 0 ? ' · a horario' : ` · a horario (${atraso} min)`;
+            const textoExtra = extra === null ? ''
+              : ` · duró ${realMin} min: ${extra > 0 ? `${extra} min más` : extra < 0 ? `${-extra} min menos` : 'lo mismo'} que lo pactado`;
+            // Hora cargada a mano: va con la fecha del turno; si queda más de 12 h antes de la referencia, es del día siguiente.
+            const conFecha = (hhmm: string, referencia: string) => {
+              const candidato = `${fechaTurno}T${hhmm}:00`;
+              return minutosEntre(referencia, candidato) < -12 * 60 ? sumarMinutos(candidato, 24 * 60) : candidato;
+            };
+            const fila = (
+              campo: 'inicioReal' | 'finReal',
+              titulo: string,
+              botonAhora: string,
+              hora: string,
+              setHora: (v: string) => void,
+              referencia: string,
+              descripcion: string,
+            ) => {
+              const guardado = appointment[campo];
+              return (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="w-12 text-sm font-medium text-brand-gray">{titulo}</span>
+                  {esHoy && !guardado && (
+                    <Button size="sm" onClick={() => guardarHorarioReal(campo, `${ahoraLocal()}:00`)} isLoading={isSavingInicio}>{botonAhora}</Button>
                   )}
                   <input
                     type="time"
-                    aria-label="Hora real de inicio"
-                    value={horaInicioReal}
-                    onChange={(e) => setHoraInicioReal(e.target.value)}
+                    aria-label={`Hora real de ${titulo.toLowerCase()}`}
+                    value={hora}
+                    onChange={(e) => setHora(e.target.value)}
                     className="px-3 py-1.5 bg-white border border-slate-300 rounded-md text-sm text-brand-gray focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                   />
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={!horaInicioReal || isSavingInicio || horaInicioReal === appointment.inicioReal?.slice(11, 16)}
-                    onClick={() => {
-                      const candidato = `${fechaTurno}T${horaInicioReal}:00`;
-                      // Una sesión que empieza pasada la medianoche es del día siguiente.
-                      guardarInicioReal(minutosEntre(appointment.fechaHoraInicio, candidato) < -12 * 60 ? sumarMinutos(candidato, 24 * 60) : candidato);
-                    }}
+                    disabled={!hora || isSavingInicio || hora === guardado?.slice(11, 16)}
+                    onClick={() => guardarHorarioReal(campo, conFecha(hora, referencia))}
                   >
-                    {appointment.inicioReal ? 'Corregir hora' : 'Guardar hora'}
+                    {guardado ? 'Corregir' : 'Guardar'}
                   </Button>
-                  {appointment.inicioReal && (
-                    <button type="button" onClick={() => guardarInicioReal(null)} disabled={isSavingInicio} className="text-sm text-slate-500 hover:text-red-600 hover:underline">
+                  {guardado && (
+                    <button type="button" onClick={() => guardarHorarioReal(campo, null)} disabled={isSavingInicio} className="text-sm text-slate-500 hover:text-red-600 hover:underline">
                       Borrar
                     </button>
                   )}
+                  <span className="text-xs text-slate-500">{descripcion}</span>
                 </div>
+              );
+            };
+            return (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <div>
+                  <p className="text-sm font-medium text-brand-gray">Horario real de la sesión</p>
+                  <p className="text-xs text-slate-500">
+                    Se usa en los tableros para medir el atraso al empezar y cuánto más dura cada sesión de lo pactado ({pactadaMin} min).
+                  </p>
+                </div>
+                {fila('inicioReal', 'Inicio', 'Empezó ahora', horaInicioReal, setHoraInicioReal, appointment.fechaHoraInicio,
+                  appointment.inicioReal ? `Empezó a las ${appointment.inicioReal.slice(11, 16)}${textoAtraso}` : 'Sin registrar')}
+                {fila('finReal', 'Fin', 'Terminó ahora', horaFinReal, setHoraFinReal, appointment.inicioReal ?? appointment.fechaHoraInicio,
+                  appointment.finReal ? `Terminó a las ${appointment.finReal.slice(11, 16)}${textoExtra}` : 'Sin registrar')}
+                {inicioError && <p className="text-sm text-red-600" role="alert">{inicioError}</p>}
               </div>
             );
           })()}
