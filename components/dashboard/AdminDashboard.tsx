@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../shared/Button';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -12,12 +12,14 @@ const CogIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6
 
 export const AdminDashboard: React.FC = () => {
   const { profile } = useAuth();
+  const navigate = useNavigate();
+  const nombre = `${profile?.nombre ?? ''} ${profile?.apellido ?? ''}`.trim();
 
   return (
     <div className="space-y-8">
       <div className="bg-white shadow-lg rounded-lg p-6">
         <h1 className="text-3xl font-semibold text-primary-dark">Panel de Administración</h1> {/* text-slate-800 to text-primary-dark */}
-        <p className="mt-2 text-brand-gray">Bienvenido/a, {profile ? `${profile.nombre} ${profile.apellido}` : 'Admin'}. Gestiona la plataforma.</p> {/* text-slate-600 to text-brand-gray */}
+        <p className="mt-2 text-brand-gray">Bienvenido/a{nombre ? `, ${nombre}` : ''}. Gestiona la plataforma.</p> {/* text-slate-600 to text-brand-gray */}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -37,12 +39,11 @@ export const AdminDashboard: React.FC = () => {
           <Button variant="outline" onClick={() => alert('Funcionalidad de "Configuración" por implementar.')}>Ir a Configuración</Button>
         </div>
         
-        {/* Placeholder for Reports/Analytics */}
         <div className="bg-white shadow rounded-lg p-6 flex flex-col items-center text-center">
           <ChartBarIcon />
           <h2 className="text-xl font-semibold text-primary mt-3">Reportes</h2> {/* text-slate-700 to text-primary */}
-          <p className="text-brand-gray mt-1 mb-3">Ver estadísticas y reportes de la plataforma.</p> {/* text-slate-500 to text-brand-gray */}
-          <Button variant="outline" onClick={() => alert('Funcionalidad de "Reportes" por implementar.')}>Ver Reportes</Button>
+          <p className="text-brand-gray mt-1 mb-3">Cobranzas, atrasos de obras sociales, sesiones y turnos.</p>
+          <Button variant="outline" onClick={() => navigate('/tableros')}>Ver Tableros</Button>
         </div>
       </div>
       
