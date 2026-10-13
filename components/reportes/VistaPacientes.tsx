@@ -42,6 +42,7 @@ export const VistaPacientes: React.FC<Props> = ({
   const { continuidad: c, retencion, respaldo, evolucion, ultimoMes } = a;
 
   const provisorios = a.meses.filter(m => m.provisorio);
+  const sinAgenda = a.riesgo.filter(f => f.sesionesFacturadas > 0 && f.conTurno === 0 && f.sesionesAtendidas === 0);
   const columnasCohorte = Array.from({ length: a.offsetsCohorte }, (_, k) => `+${k + 1}`);
 
   const columnasRiesgo: ColumnaTabla<FilaRiesgo>[] = [
@@ -55,7 +56,7 @@ export const VistaPacientes: React.FC<Props> = ({
       titulo: 'Sin turno',
       valor: f => f.sinTurno,
       mostrar: f => (f.sinTurno
-        ? <span className="inline-flex items-center gap-1">{(f.pctSinTurno ?? 0) > 1 - META_RESPALDO && <IconoEstado tipo="alerta" />}{fmt.entero(f.sinTurno)} <span className="text-slate-400">({fmt.pct(f.pctSinTurno)})</span></span>
+        ? <span className="inline-flex items-center gap-1">{(f.pctSinTurno ?? 0) > 1 - META_RESPALDO && <IconoEstado tipo="alerta" />}{fmt.entero(f.sinTurno)} <span className="text-slate-500">({fmt.pct(f.pctSinTurno)})</span></span>
         : '—'),
       numerica: true,
     },
@@ -89,20 +90,20 @@ export const VistaPacientes: React.FC<Props> = ({
           etiqueta="Se están enfriando"
           icono={c.enfriandose ? <IconoEstado tipo="alerta" /> : undefined}
           valor={fmt.entero(c.enfriandose)}
-          detalle={`de ${fmt.entero(c.conRitmo)} que venían todos los meses`}
+          detalle={`de ${fmt.entero(c.conRitmo)} con ≥ 1 sesión por mes: menos de la mitad en 30 d`}
         />
         <Indicador
           etiqueta="Retención a 3 meses"
           valor={fmt.pct(retencion.reciente.pct)}
           delta={deltaPuntos(retencion.reciente.pct, retencion.anterior.pct)}
           deltaEtiqueta={`vs cohortes ${rangoMeses(retencion.anterior.desde, retencion.anterior.hasta)}`}
-          detalle={`Inicio ${rangoMeses(retencion.reciente.desde, retencion.reciente.hasta)} · antes ${fmt.pct(retencion.anterior.pct)}`}
+          detalle={`Nuevos ${rangoMeses(retencion.reciente.desde, retencion.reciente.hasta)} (n ${fmt.entero(retencion.reciente.n)}) · antes ${fmt.pct(retencion.anterior.pct)} (n ${fmt.entero(retencion.anterior.n)})`}
         />
         <Indicador
-          etiqueta={`Crecimiento neto ${ultimoMes ? fmt.mes(ultimoMes.mes) : ''}`}
+          etiqueta={`Crecimiento neto ${ultimoMes ? `${fmt.mes(ultimoMes.mes)}${ultimoMes.provisorio ? ' (prov.)' : ''}` : ''}`}
           valor={ultimoMes ? signo(ultimoMes.neto) : '—'}
           detalle={ultimoMes
-            ? `${fmt.entero(ultimoMes.nuevos)} nuevos − ${fmt.entero(ultimoMes.bajas)} bajas${ultimoMes.posibles ? ` (+${fmt.entero(ultimoMes.posibles)} posibles)` : ''} · ${fmt.entero(ultimoMes.atendidos)} atendidos`
+            ? `${fmt.entero(ultimoMes.nuevos)} nuevos − ${fmt.entero(ultimoMes.bajas)} bajas${ultimoMes.posibles ? ` (+${fmt.entero(ultimoMes.posibles)} posibles)` : ''} · ${fmt.entero(ultimoMes.atendidos)} atendidos${ultimoMes.provisorio ? ` · bajas a confirmar a los ${DIAS_BAJA} d` : ''}`
             : 'Sin turnos finalizados el mes pasado'}
         />
         <Indicador
@@ -127,7 +128,7 @@ export const VistaPacientes: React.FC<Props> = ({
         <TarjetaGrafico
           className="lg:col-span-2"
           titulo="Nuevos y bajas por mes"
-          subtitulo={`Baja: último turno en ese mes, sin turnos agendados y ${DIAS_BAJA} días sin volver${provisorios.length ? ` · ${provisorios.map(m => fmt.mes(m.mes)).join(' y ')}, provisorios` : ''}`}
+          subtitulo={`Baja: último turno ese mes, nada agendado y ${DIAS_BAJA} d sin volver${provisorios.length ? ` · ${provisorios.map(m => fmt.mes(m.mes)).join(' y ')}: provisorios` : ''}`}
           actualizando={actualizando}
           leyenda={<Leyenda items={[
             { color: tema.serie, etiqueta: 'Nuevos' },
@@ -139,6 +140,7 @@ export const VistaPacientes: React.FC<Props> = ({
               columnas={[
                 { clave: 'mes', titulo: 'Mes', valor: (m: MesPacientes) => m.mes, mostrar: m => `${fmt.mes(m.mes)}${m.provisorio ? ' (prov.)' : ''}` },
                 { clave: 'nuevos', titulo: 'Nuevos', valor: m => m.nuevos, numerica: true },
+                { clave: 'previos', titulo: 'Ya facturados', valor: m => m.previos, numerica: true },
                 { clave: 'bajas', titulo: 'Bajas', valor: m => m.bajas, numerica: true },
                 { clave: 'posibles', titulo: 'Posibles', valor: m => m.posibles, numerica: true },
                 { clave: 'neto', titulo: 'Neto', valor: m => m.neto, mostrar: m => signo(m.neto), numerica: true },
@@ -166,6 +168,7 @@ export const VistaPacientes: React.FC<Props> = ({
                   <div className="mt-1 border-t border-slate-100 pt-1">
                     <FilaTooltip etiqueta="neto" valor={signo(m.neto)} fuerte />
                     <FilaTooltip etiqueta="pacientes atendidos" valor={fmt.entero(m.atendidos)} />
+                    {m.previos > 0 && <FilaTooltip etiqueta="primer turno, pero ya facturados antes (no son nuevos)" valor={fmt.entero(m.previos)} />}
                     {m.provisorio && <div className="mt-1 text-xs text-slate-500">Provisorio: las bajas se confirman a los {DIAS_BAJA} días.</div>}
                   </div>
                 );
@@ -177,7 +180,7 @@ export const VistaPacientes: React.FC<Props> = ({
         <TarjetaGrafico
           className="lg:col-span-2"
           titulo="Retención por cohorte"
-          subtitulo="% de los que empezaron cada mes que tuvieron sesión en el mes +1…+6 (solo meses cerrados)"
+          subtitulo="% de los nuevos de cada mes que tuvieron sesión en el mes +1…+6 · sin los que ya se facturaban antes · solo meses cerrados"
           actualizando={actualizando}
           tabla={
             <TablaDatos
@@ -213,7 +216,7 @@ export const VistaPacientes: React.FC<Props> = ({
                 const r = x.retenidos[j] ?? 0;
                 return (
                   <>
-                    <div className="mb-1 text-xs font-medium text-slate-500">Empezaron en {fmt.mes(x.mes)} · {fmt.mes(sumarMeses(x.mes, j + 1))}</div>
+                    <div className="mb-1 text-xs font-medium text-slate-500">Nuevos de {fmt.mes(x.mes)} · sesión en {fmt.mes(sumarMeses(x.mes, j + 1))}</div>
                     <FilaTooltip etiqueta="siguen viniendo" valor={fmt.pct(r / x.n)} fuerte />
                     <FilaTooltip etiqueta="pacientes" valor={`${fmt.entero(r)} de ${fmt.entero(x.n)}`} />
                   </>
@@ -226,7 +229,7 @@ export const VistaPacientes: React.FC<Props> = ({
         <TarjetaGrafico
           className="lg:col-span-3"
           titulo="Riesgo por terapeuta"
-          subtitulo={`${rangoMeses(respaldo.desde, respaldo.hasta)} · sesiones facturadas con y sin turno finalizado · evolución: registro del historial ±${TOLERANCIA_EVOLUCION_DIAS} día · activos: ${DIAS_ACTIVO} d`}
+          subtitulo={`${rangoMeses(respaldo.desde, respaldo.hasta)} · sesiones facturadas con y sin turno finalizado (mismo paciente, mes y terapeuta) · evolución ±${TOLERANCIA_EVOLUCION_DIAS} d · activos: últimos ${DIAS_ACTIVO} d`}
           actualizando={actualizando}
           cuerpoClassName="min-h-[14rem]"
         >
@@ -241,8 +244,15 @@ export const VistaPacientes: React.FC<Props> = ({
                 vacio={`No hay sesiones ni facturas en los últimos ${MESES_RIESGO} meses cerrados.`}
               />
             </div>
-            {esAdmin && a.hhi !== null && a.riesgo.length > 1 && (
+            {sinAgenda.length > 0 && (
               <p className="shrink-0 border-t border-slate-100 pt-2 text-xs text-slate-500">
+                <span className="mr-1 inline-block align-[-1px]"><IconoEstado tipo="alerta" /></span>
+                {sinAgenda.length === 1 ? `${sinAgenda[0].nombre} facturó` : `${fmt.entero(sinAgenda.length)} terapeutas facturaron`} sin cargar turnos:
+                {' '}sus pacientes no entran en activos, bajas, cohortes ni evolución.
+              </p>
+            )}
+            {esAdmin && a.hhi !== null && a.riesgo.length > 1 && (
+              <p className={`shrink-0 text-xs text-slate-500 ${sinAgenda.length ? 'pt-1' : 'border-t border-slate-100 pt-2'}`}>
                 Concentración de la facturación (HHI): <span className="font-semibold tabular-nums text-slate-800">{fmt.entero(a.hhi * 10_000)}</span>
                 {' '}· equivale a {plural(Math.round(1 / a.hhi), 'terapeuta', 'terapeutas')} con la misma facturación
                 {a.hhi > 0.25 ? ' · muy concentrada' : a.hhi > 0.15 ? ' · concentrada' : ''}

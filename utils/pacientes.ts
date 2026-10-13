@@ -34,15 +34,28 @@ const ratio = (a: number, b: number): number | null => (b ? a / b : null);
 
 // ---------- Historia de cada paciente ----------
 
+// Primera emisión facturada a cada paciente (con las facturas ya filtradas).
+function primerasFacturas(facturas: FacturaAnalizada[], facturaPacientes: FacturaPacienteRaw[]): Map<string, number> {
+  const emision = new Map(facturas.map(f => [f.id, f.emision]));
+  const r = new Map<string, number>();
+  for (const fp of facturaPacientes) {
+    const e = emision.get(fp.factura_id);
+    if (e === undefined || !fp.paciente_id) continue;
+    r.set(fp.paciente_id, Math.min(e, r.get(fp.paciente_id) ?? Infinity));
+  }
+  return r;
+}
+
 interface Historia {
   primero: number; // primer turno finalizado
   ultimo: number;
   dias: number[]; // turnos finalizados (hasta hoy)
   meses: Set<string>;
   conFuturo: boolean; // tiene un turno pendiente o confirmado desde hoy
+  previo: boolean; // ya se le facturaba antes del mes de su primer turno: no es nuevo, recién llegó a la agenda
 }
 
-function historias(turnos: TurnoAnalizado[], hoy: number): Map<string, Historia> {
+function historias(turnos: TurnoAnalizado[], primeraFactura: Map<string, number>, hoy: number): Map<string, Historia> {
   const mapa = new Map<string, Historia>();
   const futuros = new Set<string>();
   for (const t of turnos) {
@@ -56,10 +69,14 @@ function historias(turnos: TurnoAnalizado[], hoy: number): Map<string, Historia>
       h.dias.push(t.dia);
       h.meses.add(mesDeDia(t.dia));
     } else {
-      mapa.set(t.pacienteId, { primero: t.dia, ultimo: t.dia, dias: [t.dia], meses: new Set([mesDeDia(t.dia)]), conFuturo: false });
+      mapa.set(t.pacienteId, { primero: t.dia, ultimo: t.dia, dias: [t.dia], meses: new Set([mesDeDia(t.dia)]), conFuturo: false, previo: false });
     }
   }
-  for (const [id, h] of mapa) h.conFuturo = futuros.has(id);
+  for (const [id, h] of mapa) {
+    h.conFuturo = futuros.has(id);
+    const f = primeraFactura.get(id);
+    h.previo = f !== undefined && f < inicioMes(mesDeDia(h.primero));
+  }
   return mapa;
 }
 
@@ -68,7 +85,7 @@ function historias(turnos: TurnoAnalizado[], hoy: number): Map<string, Historia>
 export interface Continuidad {
   activos: number;
   sinProximo: number; // activos sin ningún turno agendado desde hoy
-  conRitmo: number; // venían al menos una vez por mes (entre hoy−120 y hoy−30)
+  conRitmo: number; // venían en promedio al menos una vez por mes (entre hoy−120 y hoy−30)
   enfriandose: number; // de esos, en los últimos 30 días vinieron menos de la mitad que antes
 }
 
@@ -83,7 +100,7 @@ function continuidad(hs: Map<string, Historia>, hoy: number): Continuidad {
     const ritmoMensual = antes / 3;
     if (ritmoMensual < 1) continue;
     r.conRitmo++;
-    const ahora = h.dias.filter(d => d >= hoy - 30).length;
+    const ahora = h.dias.filter(d => d > hoy - 30).length;
     if (ahora < ritmoMensual / 2) r.enfriandose++;
   }
   return r;
@@ -96,12 +113,15 @@ export interface Cohorte {
   n: number;
   retenidos: (number | null)[]; // por mes +1..+N; null si ese mes todavía no cerró
 }
+// Las cohortes, los nuevos y la retención solo cuentan pacientes nuevos de verdad: los que ya se
+// facturaban antes de su primer turno son pacientes previos que recién se pasaron a la agenda.
 
 function cohortes(hs: Map<string, Historia>, hoy: number, cantidad: number, offsets: number): Cohorte[] {
   const cerrado = ultimoMesCerrado(hoy);
   const ultima = sumarMeses(cerrado, -1); // la última cohorte con al menos el mes +1 maduro
   const porMes = new Map(mesesHasta(ultima, cantidad).map(mes => [mes, { mes, n: 0, retenidos: Array<number | null>(offsets).fill(0) }]));
   for (const h of hs.values()) {
+    if (h.previo) continue;
     const c = porMes.get(mesDeDia(h.primero));
     if (!c) continue;
     c.n++;
@@ -126,7 +146,7 @@ function retencionComparada(hs: Map<string, Historia>, hoy: number, k = 3): { re
     let n = 0, retenidos = 0;
     for (const h of hs.values()) {
       const mes = mesDeDia(h.primero);
-      if (!meses.has(mes)) continue;
+      if (h.previo || !meses.has(mes)) continue;
       n++;
       if (h.meses.has(sumarMeses(mes, k))) retenidos++;
     }
@@ -140,6 +160,7 @@ function retencionComparada(hs: Map<string, Historia>, hoy: number, k = 3): { re
 export type MesPacientes = {
   mes: string;
   nuevos: number;
+  previos: number; // primer turno ese mes, pero ya se les facturaba antes: no cuentan como nuevos
   bajas: number; // último turno en el mes, sin turnos futuros y ya pasaron DIAS_BAJA días
   posibles: number; // igual, pero todavía no pasaron DIAS_BAJA días: pueden volver
   atendidos: number;
@@ -150,11 +171,11 @@ export type MesPacientes = {
 function altasYBajas(hs: Map<string, Historia>, hoy: number, cantidad: number): MesPacientes[] {
   const meses = mesesHasta(ultimoMesCerrado(hoy), cantidad);
   const porMes = new Map(meses.map(mes => [mes, {
-    mes, nuevos: 0, bajas: 0, posibles: 0, atendidos: 0, neto: 0, provisorio: finMes(mes) > hoy - DIAS_BAJA,
+    mes, nuevos: 0, previos: 0, bajas: 0, posibles: 0, atendidos: 0, neto: 0, provisorio: finMes(mes) > hoy - DIAS_BAJA,
   }]));
   for (const h of hs.values()) {
     const alta = porMes.get(mesDeDia(h.primero));
-    if (alta) alta.nuevos++;
+    if (alta) { if (h.previo) alta.previos++; else alta.nuevos++; }
     for (const mes of h.meses) { const m = porMes.get(mes); if (m) m.atendidos++; }
     if (h.conFuturo) continue;
     const baja = porMes.get(mesDeDia(h.ultimo));
@@ -179,12 +200,12 @@ function respaldoAgenda(
 ): Map<string | null, Respaldo> {
   const facturaPorId = new Map(facturas.map(f => [f.id, f]));
   const facturadas = new Map<string, { terapeuta: string | null; sesiones: number }>();
-  let sinPaciente = 0;
+  const sinPaciente = new Map<string | null, number>(); // líneas sin paciente: no se pueden cruzar, cuentan como sin turno
   for (const fp of facturaPacientes) {
     const f = facturaPorId.get(fp.factura_id);
     if (!f || !meses.has(mesDeDia(f.emision))) continue;
     const s = fp.sesiones ?? 0;
-    if (!fp.paciente_id) { sinPaciente += s; continue; }
+    if (!fp.paciente_id) { sinPaciente.set(f.terapeutaId, (sinPaciente.get(f.terapeutaId) ?? 0) + s); continue; }
     const k = clave(fp.paciente_id, f.terapeutaId, mesDeDia(f.emision));
     const x = facturadas.get(k);
     if (x) x.sesiones += s; else facturadas.set(k, { terapeuta: f.terapeutaId, sesiones: s });
@@ -203,7 +224,7 @@ function respaldoAgenda(
     porTerapeuta.set(ter, r);
   };
   for (const [k, x] of facturadas) sumar(x.terapeuta, x.sesiones, Math.max(0, x.sesiones - (hechos.get(k) ?? 0)));
-  if (sinPaciente) sumar(null, sinPaciente, sinPaciente);
+  for (const [ter, s] of sinPaciente) if (s) sumar(ter, s, s);
   return porTerapeuta;
 }
 
@@ -269,7 +290,7 @@ export function analizarPacientes(
   personas: PersonaRaw[],
   hoy: number,
 ): AnalisisPacientes {
-  const hs = historias(turnos, hoy);
+  const hs = historias(turnos, primerasFacturas(facturas, facturaPacientes), hoy);
   const cerrado = ultimoMesCerrado(hoy);
   const mesesRiesgo = mesesHasta(cerrado, MESES_RIESGO);
   const desde = inicioMes(mesesRiesgo[0]);

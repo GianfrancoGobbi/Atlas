@@ -126,6 +126,7 @@ export const Navbar: React.FC = () => {
                       {/* <NavItem to="/obras-sociales">Obras Sociales</NavItem> */}
                       <NavItem to="/facturacion">Facturación</NavItem>
                       <NavItem to="/tableros">Tableros</NavItem>
+                      {role === UserRole.ADMIN && <NavItem to="/costos">Costos</NavItem>}
                     </>
                   )}
                 </>
@@ -209,6 +210,7 @@ export const Navbar: React.FC = () => {
                 {/* <NavItem to="/obras-sociales" onClick={() => setIsMobileMenuOpen(false)} isMobile={true}>Obras Sociales</NavItem> */}
                 <NavItem to="/facturacion" onClick={() => setIsMobileMenuOpen(false)} isMobile={true}>Facturación</NavItem>
                 <NavItem to="/tableros" onClick={() => setIsMobileMenuOpen(false)} isMobile={true}>Tableros</NavItem>
+                {role === UserRole.ADMIN && <NavItem to="/costos" onClick={() => setIsMobileMenuOpen(false)} isMobile={true}>Costos</NavItem>}
               </>
             )}
             <Button onClick={handleLogout} variant="outline" size="md" isLoading={isLoading} fullWidth={true} className="mt-3">

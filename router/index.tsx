@@ -21,6 +21,7 @@ import { Spinner } from '../components/shared/Spinner';
 
 // Los tableros se cargan aparte para no sumar su peso al resto de la app.
 const TablerosPage = lazy(() => import('../pages/TablerosPage').then(m => ({ default: m.TablerosPage })));
+const CostosPage = lazy(() => import('../pages/CostosPage').then(m => ({ default: m.CostosPage })));
 
 export const AppRouter: React.FC = () => {
   return (
@@ -63,6 +64,17 @@ export const AppRouter: React.FC = () => {
                 */}
             </Route>
             
+            <Route element={<ProtectedRoute allowedRoles={[UserRole.ADMIN]} />}>
+              <Route
+                path="/costos"
+                element={
+                  <Suspense fallback={<div className="flex items-center justify-center py-16"><Spinner size="lg" /></div>}>
+                    <CostosPage />
+                  </Suspense>
+                }
+              />
+            </Route>
+
             {/* 
               Admin specific routes (example)
               <Route element={<ProtectedRoute allowedRoles={[UserRole.ADMIN]} />}>
