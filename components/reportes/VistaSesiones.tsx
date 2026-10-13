@@ -9,11 +9,14 @@ import {
   cobranzaPorMes, DIAS_SEMANA, FacturaAnalizada, grillaTurnos, Rango, resumenPorObraSocial, resumirTurnos, TurnoAnalizado,
 } from '../../utils/reportes';
 
+export type SeccionSesiones = 'sesiones' | 'turnos';
+
 const ETIQUETA_ESTADO_TURNO: Record<string, string> = {
   pendiente: 'Pendientes', confirmado: 'Confirmados', finalizado: 'Finalizados', cancelado: 'Cancelados',
 };
 
-export type SeccionSesiones = 'sesiones' | 'turnos';
+// Grilla que ocupa el alto restante de la vista (en pantallas grandes, sin scroll de página).
+const GRILLA = 'grid min-h-0 flex-1 gap-3 lg:grid-rows-[minmax(0,1fr)]';
 
 interface Props {
   seccion: SeccionSesiones;
@@ -38,24 +41,23 @@ export const VistaSesiones: React.FC<Props> = ({
   const grilla = useMemo(() => grillaTurnos(turnos), [turnos]);
 
   const totalSesiones = facturas.reduce((s, f) => s + f.sesiones, 0);
+  const totalFacturado = facturas.reduce((s, f) => s + f.monto, 0);
   const mesesConSesiones = meses.filter(m => m.sesiones > 0).length;
 
+  // ---------- Turnos ----------
   if (seccion === 'turnos') {
     return (
-      <div className="space-y-5">
-        {avisoFiltrosNoAplican && (
-          <p className="text-sm text-slate-500">
-            Los turnos no tienen obra social ni estado de pago: esos dos filtros no se aplican a los gráficos de turnos.
-          </p>
-        )}
-
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+      <div className="flex h-full flex-col gap-3">
+        <div className="grid shrink-0 grid-cols-3 gap-3">
           <Indicador etiqueta="Turnos agendados" valor={fmt.entero(resumenTurnos.total)} detalle={`${fmt.decimal(resumenTurnos.horasAgendadas)} horas`} />
           <Indicador etiqueta="Duración promedio" valor={resumenTurnos.duracionProm === null ? '—' : `${fmt.entero(resumenTurnos.duracionProm)} min`} />
-          <Indicador etiqueta="Turnos cancelados" valor={fmt.pct(resumenTurnos.pctCancelados)} />
+          <Indicador
+            etiqueta="Turnos cancelados"
+            valor={fmt.pct(resumenTurnos.pctCancelados)}
+            detalle={avisoFiltrosNoAplican ? 'Los filtros de obra social y pago no aplican a turnos' : undefined}
+          />
         </div>
-
-        <div className="grid gap-5 lg:grid-cols-3">
+        <div className={`${GRILLA} lg:grid-cols-3`}>
           <TarjetaGrafico
             className="lg:col-span-2"
             titulo="Turnos por día y horario"
@@ -88,6 +90,7 @@ export const VistaSesiones: React.FC<Props> = ({
           <TarjetaGrafico
             titulo="Turnos por estado"
             actualizando={actualizando}
+            cuerpoClassName="min-h-[10rem]"
             tabla={
               <TablaDatos
                 columnas={[
@@ -117,9 +120,10 @@ export const VistaSesiones: React.FC<Props> = ({
     );
   }
 
+  // ---------- Sesiones ----------
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+    <div className="flex h-full flex-col gap-3">
+      <div className="grid shrink-0 grid-cols-3 gap-3">
         <Indicador etiqueta="Sesiones facturadas" valor={fmt.entero(totalSesiones)} detalle={`${fmt.entero(facturas.length)} facturas`} />
         <Indicador
           etiqueta="Sesiones por mes"
@@ -128,12 +132,11 @@ export const VistaSesiones: React.FC<Props> = ({
         />
         <Indicador
           etiqueta="Facturado por sesión"
-          valor={totalSesiones ? fmt.moneda(facturas.reduce((s, f) => s + f.monto, 0) / totalSesiones) : '—'}
+          valor={totalSesiones ? fmt.moneda(totalFacturado / totalSesiones) : '—'}
           detalle="Promedio del período"
         />
       </div>
-
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className={`${GRILLA} lg:grid-cols-2`}>
         <TarjetaGrafico
           titulo="Sesiones facturadas por mes"
           subtitulo="Según el mes de emisión de la factura"
@@ -165,6 +168,7 @@ export const VistaSesiones: React.FC<Props> = ({
           titulo="Sesiones por obra social"
           subtitulo="Tocá una barra para filtrar por esa obra social"
           actualizando={actualizando}
+          cuerpoClassName="min-h-[22rem]"
           tabla={
             <TablaDatos
               columnas={[

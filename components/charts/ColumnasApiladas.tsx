@@ -1,5 +1,5 @@
 import React, { ReactNode, useState } from 'react';
-import { EstadoTooltip, FilaTooltip, Tooltip, useAncho } from './base';
+import { EstadoTooltip, FilaTooltip, Tooltip, useTamano } from './base';
 import { escalaLinda, GAP, pathColumna, tema } from './tema';
 
 export interface SerieColumna { clave: string; etiqueta: string; color: string }
@@ -12,11 +12,10 @@ interface Props {
   formatoEje: (n: number) => string;
   extraTooltip?: (i: number) => ReactNode;
   colorCategoria?: (i: number) => string; // serie única con un tono por categoría (rampa ordinal)
-  alto?: number;
   etiquetaTotal?: string; // fila "total" del tooltip (solo si hay más de una serie)
 }
 
-const M = { izq: 56, der: 8, arriba: 22, abajo: 26 };
+const M = { izq: 52, der: 8, arriba: 18, abajo: 22 };
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 const ANCHO_MAX_BARRA = 24;
 const ANCHO_CARACTER = 6.2; // aproximado, a 11 px
@@ -31,11 +30,12 @@ const partir = (s: string): string[] => {
 };
 
 // Columnas (apiladas si hay varias series). Hover por columna con todas las series.
+// Llena el contenedor, que tiene que tener posición relativa y alto definido.
 export const ColumnasApiladas: React.FC<Props> = ({
-  categorias, series, valores, formatoValor, formatoEje, extraTooltip, colorCategoria, alto = 260, etiquetaTotal = 'Total',
+  categorias, series, valores, formatoValor, formatoEje, extraTooltip, colorCategoria, etiquetaTotal = 'Total',
 }) => {
   const colorDe = (s: SerieColumna, i: number) => colorCategoria?.(i) ?? s.color;
-  const [ref, ancho] = useAncho<HTMLDivElement>();
+  const [ref, { ancho, alto }] = useTamano<HTMLDivElement>();
   const [activa, setActiva] = useState<number | null>(null);
   const [tip, setTip] = useState<EstadoTooltip | null>(null);
 
@@ -84,9 +84,9 @@ export const ColumnasApiladas: React.FC<Props> = ({
   const ocultar = () => { setActiva(null); setTip(null); };
 
   return (
-    <div ref={ref} className="relative w-full min-w-0" onPointerLeave={ocultar}>
-      {ancho > 0 && (
-        <svg width={ancho} height={alto} role="img" aria-label="Gráfico de columnas">
+    <div ref={ref} className="absolute inset-0" onPointerLeave={ocultar}>
+      {ancho > 0 && alto > 80 && (
+        <svg width={ancho} height={alto} className="block" role="img" aria-label="Gráfico de columnas">
           {ticks.map(t => (
             <g key={t}>
               <line x1={M.izq} x2={ancho - M.der} y1={y(t)} y2={y(t)} stroke={t === 0 ? tema.base : tema.grilla} strokeWidth={1} shapeRendering="crispEdges" />

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { UserRole } from '../types';
@@ -10,25 +10,31 @@ import { SeccionSesiones, VistaSesiones } from '../components/reportes/VistaSesi
 import { VistaTerapeutas } from '../components/reportes/VistaTerapeutas';
 import { DatosTableros, reportesService } from '../services/reportesService';
 import {
-  analizarFacturas, analizarTurnos, FILTROS_INICIALES, FiltroEstado, Filtros, filtrarFacturas, filtrarTurnos,
+  analizarFacturas, analizarTurnos, CalidadDatos, FILTROS_INICIALES, FiltroEstado, Filtros, filtrarFacturas, filtrarTurnos,
   hoyDia, PRESETS_PERIODO, PresetPeriodo, rangoDeFiltros,
 } from '../utils/reportes';
 
-type Vista = 'cobranzas' | 'sesiones' | 'terapeutas';
+type Vista = SeccionCobranzas | SeccionSesiones | 'terapeutas';
 
-// Subpestañas de cada pestaña (la primera es la de entrada).
-const SUBVISTAS: Record<Vista, { id: string; etiqueta: string }[]> = {
-  cobranzas: [
-    { id: 'resumen', etiqueta: 'Resumen' },
-    { id: 'obras', etiqueta: 'Por obra social' },
-    { id: 'deuda', etiqueta: 'Deuda impaga' },
-  ],
-  sesiones: [
-    { id: 'sesiones', etiqueta: 'Sesiones' },
-    { id: 'turnos', etiqueta: 'Turnos' },
-  ],
-  terapeutas: [],
-};
+// Menú de vistas: todas a un clic, agrupadas por tema.
+const GRUPOS: { titulo: string; soloAdmin?: boolean; vistas: { id: Vista; etiqueta: string }[] }[] = [
+  {
+    titulo: 'Cobranzas',
+    vistas: [
+      { id: 'resumen', etiqueta: 'Resumen' },
+      { id: 'obras', etiqueta: 'Por obra social' },
+      { id: 'deuda', etiqueta: 'Deuda impaga' },
+    ],
+  },
+  {
+    titulo: 'Actividad',
+    vistas: [
+      { id: 'sesiones', etiqueta: 'Sesiones' },
+      { id: 'turnos', etiqueta: 'Turnos' },
+    ],
+  },
+  { titulo: 'Equipo', soloAdmin: true, vistas: [{ id: 'terapeutas', etiqueta: 'Por terapeuta' }] },
+];
 
 // ---------- Filtros en la URL (se pueden compartir o guardar como favorito) ----------
 
@@ -49,10 +55,9 @@ function leerFiltros(p: URLSearchParams): Filtros {
   };
 }
 
-function aParams(f: Filtros, vista: Vista, sub?: string): URLSearchParams {
+function aParams(f: Filtros, vista: Vista): URLSearchParams {
   const p = new URLSearchParams();
-  if (vista !== 'cobranzas') p.set('vista', vista);
-  if (sub && sub !== SUBVISTAS[vista][0]?.id) p.set('sub', sub);
+  if (vista !== 'resumen') p.set('vista', vista);
   if (f.preset !== FILTROS_INICIALES.preset) p.set('periodo', f.preset);
   if (f.preset === 'personalizado') {
     if (f.desde) p.set('desde', f.desde);
@@ -104,6 +109,44 @@ export const TablerosPage: React.FC = () => {
   );
 };
 
+// Notas sobre la calidad de los datos, en un desplegable para no ocupar lugar.
+const NotasDatos: React.FC<{ calidad: CalidadDatos }> = ({ calidad }) => {
+  const [abierto, setAbierto] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!abierto) return;
+    const fuera = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) setAbierto(false); };
+    document.addEventListener('pointerdown', fuera);
+    return () => document.removeEventListener('pointerdown', fuera);
+  }, [abierto]);
+
+  const notas = [
+    calidad.pagasSinFecha > 0 && `${calidad.pagasSinFecha} facturas pagas no tienen fecha de pago: cuentan como cobradas, pero no entran en los días promedio.`,
+    calidad.pagoAntesDeEmision > 0 && `${calidad.pagoAntesDeEmision} facturas tienen fecha de pago anterior a la de emisión: se cuentan como cobradas en el día.`,
+    calidad.sinFechaEmision > 0 && `${calidad.sinFechaEmision} facturas sin fecha de emisión no se incluyen.`,
+  ].filter(Boolean) as string[];
+  if (!notas.length) return null;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setAbierto(a => !a)}
+        aria-expanded={abierto}
+        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-slate-500 hover:bg-white hover:text-slate-800"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M8 7.2v3.8M8 5v.1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+        Notas sobre los datos ({notas.length})
+      </button>
+      {abierto && (
+        <div className="absolute bottom-full left-0 z-30 mb-1 w-72 rounded-xl border border-black/10 bg-white p-3 text-xs text-slate-600 shadow-xl">
+          <ul className="space-y-1.5">{notas.map(n => <li key={n}>{n}</li>)}</ul>
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface PropsTableros {
   datos: DatosTableros | null;
   esAdmin: boolean;
@@ -116,10 +159,9 @@ interface PropsTableros {
 export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, error, actualizado, onActualizar }) => {
   const [params, setParams] = useSearchParams();
   const filtros = useMemo(() => leerFiltros(params), [params]);
+  const grupos = GRUPOS.filter(g => !g.soloAdmin || esAdmin);
   const vistaParam = params.get('vista');
-  const vista: Vista = vistaParam === 'sesiones' || (vistaParam === 'terapeutas' && esAdmin) ? vistaParam : 'cobranzas';
-  const subvistas = SUBVISTAS[vista];
-  const sub = subvistas.find(s => s.id === params.get('sub'))?.id ?? subvistas[0]?.id;
+  const vista: Vista = grupos.flatMap(g => g.vistas).find(v => v.id === vistaParam)?.id ?? 'resumen';
 
   const hoy = useMemo(() => hoyDia(), [actualizado]);
   const base = useMemo(() => {
@@ -148,121 +190,105 @@ export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, er
     return [...ids].map(id => ({ id, nombre: nombrePersona(id) })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   }, [base, esAdmin, nombrePersona]);
 
-  const actualizarFiltros = (f: Filtros) => setParams(aParams(f, vista, sub), { replace: true });
+  const actualizarFiltros = (f: Filtros) => setParams(aParams(f, vista), { replace: true });
   const cambiarVista = (v: Vista) => setParams(aParams(filtros, v), { replace: true });
-  const cambiarSub = (s: string) => setParams(aParams(filtros, vista, s), { replace: true });
   const alternar = (campo: 'obrasSociales' | 'terapeutas') => (id: string) => {
     const actual = filtros[campo];
     actualizarFiltros({ ...filtros, [campo]: actual.includes(id) ? actual.filter(x => x !== id) : [...actual, id] });
   };
 
-  const pestañas: { id: Vista; etiqueta: string }[] = [
-    { id: 'cobranzas', etiqueta: 'Cobranzas y atrasos' },
-    { id: 'sesiones', etiqueta: 'Sesiones y turnos' },
-    ...(esAdmin ? [{ id: 'terapeutas' as Vista, etiqueta: 'Por terapeuta' }] : []),
-  ];
+  const botonActualizar = (
+    <button
+      type="button"
+      onClick={onActualizar}
+      disabled={cargando}
+      title={actualizado ? `Actualizado ${horaCorta.format(actualizado)}` : undefined}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+    >
+      <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden className={cargando ? 'animate-spin' : ''}>
+        <path d="M13.5 8A5.5 5.5 0 1 1 11.9 4.1M13.5 2.5v3h-3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      Actualizar
+    </button>
+  );
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-3xl font-semibold text-primary-dark">Tableros</h1>
-        <div className="flex items-center gap-3 text-sm text-slate-500">
-          {actualizado && <span>Actualizado {horaCorta.format(actualizado)}</span>}
-          <button
-            type="button"
-            onClick={onActualizar}
-            disabled={cargando}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
-          >
-            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden className={cargando ? 'animate-spin' : ''}>
-              <path d="M13.5 8A5.5 5.5 0 1 1 11.9 4.1M13.5 2.5v3h-3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            Actualizar
-          </button>
-        </div>
-      </div>
-
-      <nav className="flex gap-1 overflow-x-auto border-b border-slate-200" aria-label="Secciones de los tableros">
-        {pestañas.map(p => (
-          <button
-            key={p.id}
-            type="button"
-            onClick={() => cambiarVista(p.id)}
-            aria-current={vista === p.id ? 'page' : undefined}
-            className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
-              vista === p.id ? 'border-primary-dark text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            {p.etiqueta}
-          </button>
-        ))}
-      </nav>
-
-      {subvistas.length > 1 && (
-        <nav className="inline-flex max-w-full gap-1 overflow-x-auto rounded-lg bg-slate-200/60 p-1" aria-label="Subsecciones">
-          {subvistas.map(s => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => cambiarSub(s.id)}
-              aria-current={sub === s.id ? 'page' : undefined}
-              className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                sub === s.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              {s.etiqueta}
-            </button>
+    // En pantallas grandes todo entra en la ventana: 100dvh menos la barra de navegación (64 px) y el margen (32 px).
+    <div className="flex flex-col gap-3 lg:h-[calc(100dvh-96px)] lg:flex-row lg:gap-4">
+      <aside className="flex shrink-0 flex-col gap-3 lg:w-44">
+        <nav aria-label="Vistas de los tableros" className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 lg:mx-0 lg:flex-col lg:gap-4 lg:overflow-visible lg:px-0 lg:pb-0">
+          {grupos.map(g => (
+            <div key={g.titulo} className="flex gap-1 lg:flex-col lg:gap-0.5">
+              <p className="hidden px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400 lg:block">{g.titulo}</p>
+              {g.vistas.map(v => (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => cambiarVista(v.id)}
+                  aria-current={vista === v.id ? 'page' : undefined}
+                  className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-left text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                    vista === v.id ? 'bg-white text-slate-900 shadow-sm ring-1 ring-black/5' : 'text-slate-600 hover:bg-white/70 hover:text-slate-900'
+                  }`}
+                >
+                  {v.etiqueta}
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
-      )}
+        <div className="hidden flex-col items-start gap-2 lg:mt-auto lg:flex">
+          {base && <NotasDatos calidad={base.calidad} />}
+          {actualizado && <span className="px-2 text-xs text-slate-400">Actualizado {horaCorta.format(actualizado)}</span>}
+          {botonActualizar}
+        </div>
+      </aside>
 
-      <BarraFiltros
-        filtros={filtros}
-        onCambio={actualizarFiltros}
-        obrasSociales={opcionesObras}
-        terapeutas={opcionesTerapeutas}
-      />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+          <BarraFiltros filtros={filtros} onCambio={actualizarFiltros} obrasSociales={opcionesObras} terapeutas={opcionesTerapeutas} />
+          <div className="lg:hidden">{botonActualizar}</div>
+        </div>
 
-      {error && <Alert type="error" message={error} />}
+        {error && <Alert type="error" message={error} />}
 
-      {!base && cargando && (
-        <div className="flex items-center justify-center py-16"><Spinner size="lg" /></div>
-      )}
+        <div className="min-h-0 flex-1">
+          {!base && cargando && <div className="flex h-full min-h-[12rem] items-center justify-center"><Spinner size="lg" /></div>}
 
-      {base && vista === 'cobranzas' && (
-        <VistaCobranzas
-          seccion={sub as SeccionCobranzas}
-          facturas={facturas}
-          rango={rango}
-          calidad={base.calidad}
-          obrasSeleccionadas={filtros.obrasSociales}
-          onAlternarObraSocial={alternar('obrasSociales')}
-          nombreTerapeuta={esAdmin ? nombrePersona : undefined}
-          actualizando={cargando}
-        />
-      )}
-      {base && vista === 'sesiones' && (
-        <VistaSesiones
-          seccion={sub as SeccionSesiones}
-          facturas={facturas}
-          turnos={turnos}
-          rango={rango}
-          obrasSeleccionadas={filtros.obrasSociales}
-          onAlternarObraSocial={alternar('obrasSociales')}
-          avisoFiltrosNoAplican={filtros.obrasSociales.length > 0 || filtros.estado !== 'todas'}
-          actualizando={cargando}
-        />
-      )}
-      {base && vista === 'terapeutas' && datos && (
-        <VistaTerapeutas
-          facturas={facturas}
-          turnos={turnos}
-          personas={datos.terapeutas}
-          terapeutasSeleccionados={filtros.terapeutas}
-          onAlternarTerapeuta={alternar('terapeutas')}
-          actualizando={cargando}
-        />
-      )}
+          {base && (vista === 'resumen' || vista === 'obras' || vista === 'deuda') && (
+            <VistaCobranzas
+              seccion={vista}
+              facturas={facturas}
+              rango={rango}
+              obrasSeleccionadas={filtros.obrasSociales}
+              onAlternarObraSocial={alternar('obrasSociales')}
+              nombreTerapeuta={esAdmin ? nombrePersona : undefined}
+              actualizando={cargando}
+            />
+          )}
+          {base && (vista === 'sesiones' || vista === 'turnos') && (
+            <VistaSesiones
+              seccion={vista}
+              facturas={facturas}
+              turnos={turnos}
+              rango={rango}
+              obrasSeleccionadas={filtros.obrasSociales}
+              onAlternarObraSocial={alternar('obrasSociales')}
+              avisoFiltrosNoAplican={filtros.obrasSociales.length > 0 || filtros.estado !== 'todas'}
+              actualizando={cargando}
+            />
+          )}
+          {base && vista === 'terapeutas' && datos && (
+            <VistaTerapeutas
+              facturas={facturas}
+              turnos={turnos}
+              personas={datos.terapeutas}
+              terapeutasSeleccionados={filtros.terapeutas}
+              onAlternarTerapeuta={alternar('terapeutas')}
+              actualizando={cargando}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 };

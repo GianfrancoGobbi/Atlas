@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { BarrasHorizontales } from '../charts/BarrasHorizontales';
 import { TablaDatos, ColumnaTabla } from '../charts/TablaDatos';
-import { FilaTooltip, SinDatos, TarjetaGrafico } from '../charts/base';
+import { FilaTooltip, TarjetaGrafico, VistaVacia } from '../charts/base';
 import { fmt, tema } from '../charts/tema';
 import { FacturaAnalizada, FilaTerapeuta, PersonaRaw, resumenPorTerapeuta, TurnoAnalizado } from '../../utils/reportes';
 
@@ -20,9 +20,7 @@ export const VistaTerapeutas: React.FC<Props> = ({
 }) => {
   const filas = useMemo(() => resumenPorTerapeuta(facturas, turnos, personas), [facturas, turnos, personas]);
 
-  if (!filas.length) {
-    return <div className="rounded-xl border border-black/5 bg-white shadow-sm"><SinDatos texto="No hay actividad para estos filtros." /></div>;
-  }
+  if (!filas.length) return <VistaVacia texto="No hay actividad para estos filtros." />;
 
   const columnas: ColumnaTabla<FilaTerapeuta>[] = [
     { clave: 'nombre', titulo: 'Terapeuta', valor: t => t.nombre },
@@ -31,42 +29,52 @@ export const VistaTerapeutas: React.FC<Props> = ({
     { clave: 'facturado', titulo: 'Facturado', valor: t => t.facturado, mostrar: t => fmt.moneda(t.facturado), numerica: true },
     { clave: 'cobrado', titulo: 'Cobrado', valor: t => t.cobrado, mostrar: t => fmt.moneda(t.cobrado), numerica: true },
     { clave: 'vencido', titulo: 'Vencido', valor: t => t.vencido, mostrar: t => (t.vencido ? fmt.moneda(t.vencido) : '—'), numerica: true },
-    { clave: 'dias', titulo: 'Días prom. de cobro', valor: t => t.diasPromCobro, mostrar: t => fmt.dias(t.diasPromCobro), numerica: true },
-    { clave: 'plazo', titulo: 'Cobradas en plazo', valor: t => t.pctEnPlazo, mostrar: t => fmt.pct(t.pctEnPlazo), numerica: true },
+    { clave: 'dias', titulo: 'Días de cobro', valor: t => t.diasPromCobro, mostrar: t => fmt.dias(t.diasPromCobro), numerica: true },
+    { clave: 'plazo', titulo: 'En plazo', valor: t => t.pctEnPlazo, mostrar: t => fmt.pct(t.pctEnPlazo), numerica: true },
   ];
 
-  return (
-    <div className="space-y-5">
-      {/* Con un solo terapeuta, un gráfico de una barra no dice nada: alcanza con la tabla. */}
-      {filas.length > 1 && <TarjetaGrafico
-        titulo="Facturado por terapeuta"
-        subtitulo="Tocá una barra para filtrar por ese terapeuta"
-        actualizando={actualizando}
-        tabla={<TablaDatos columnas={columnas.slice(0, 4)} filas={filas} claveFila={t => t.id} orden={{ clave: 'facturado', desc: true }} />}
-      >
-        <BarrasHorizontales
-          filas={filas.map(t => ({
-            clave: t.id,
-            etiqueta: t.nombre,
-            valor: t.facturado,
-            color: tema.serie,
-            seleccionada: terapeutasSeleccionados.includes(t.id),
-            tooltip: (
-              <>
-                <div className="mb-1 text-xs font-medium text-slate-500">{t.nombre}</div>
-                <FilaTooltip etiqueta="facturado" valor={fmt.moneda(t.facturado)} fuerte />
-                <FilaTooltip etiqueta="sesiones" valor={fmt.entero(t.sesiones)} />
-                <FilaTooltip etiqueta="vencido" valor={fmt.moneda(t.vencido)} />
-              </>
-            ),
-          }))}
-          formatoValor={fmt.monedaCompacta}
-          onClickFila={onAlternarTerapeuta}
-        />
-      </TarjetaGrafico>}
+  // Con un solo terapeuta, un gráfico de una barra no dice nada: alcanza con la tabla.
+  const conGrafico = filas.length > 1;
 
-      <TarjetaGrafico titulo="Detalle por terapeuta" subtitulo="Tocá un encabezado para ordenar">
-        <TablaDatos columnas={columnas} filas={filas} claveFila={t => t.id} orden={{ clave: 'facturado', desc: true }} />
+  return (
+    <div className={`grid h-full min-h-0 gap-3 lg:grid-rows-[minmax(0,1fr)] ${conGrafico ? 'lg:grid-cols-5' : ''}`}>
+      {conGrafico && (
+        <TarjetaGrafico
+          className="lg:col-span-2"
+          titulo="Facturado por terapeuta"
+          subtitulo="Tocá una barra para filtrar por ese terapeuta"
+          actualizando={actualizando}
+          tabla={<TablaDatos columnas={columnas.slice(0, 4)} filas={filas} claveFila={t => t.id} orden={{ clave: 'facturado', desc: true }} />}
+        >
+          <BarrasHorizontales
+            filas={filas.map(t => ({
+              clave: t.id,
+              etiqueta: t.nombre,
+              valor: t.facturado,
+              color: tema.serie,
+              seleccionada: terapeutasSeleccionados.includes(t.id),
+              tooltip: (
+                <>
+                  <div className="mb-1 text-xs font-medium text-slate-500">{t.nombre}</div>
+                  <FilaTooltip etiqueta="facturado" valor={fmt.moneda(t.facturado)} fuerte />
+                  <FilaTooltip etiqueta="sesiones" valor={fmt.entero(t.sesiones)} />
+                  <FilaTooltip etiqueta="vencido" valor={fmt.moneda(t.vencido)} />
+                </>
+              ),
+            }))}
+            formatoValor={fmt.monedaCompacta}
+            onClickFila={onAlternarTerapeuta}
+          />
+        </TarjetaGrafico>
+      )}
+      <TarjetaGrafico
+        className={conGrafico ? 'lg:col-span-3' : ''}
+        titulo="Detalle por terapeuta"
+        subtitulo="Tocá un encabezado para ordenar"
+        actualizando={actualizando}
+        cuerpoClassName="min-h-[12rem]"
+      >
+        <TablaDatos llenar columnas={columnas} filas={filas} claveFila={t => t.id} orden={{ clave: 'facturado', desc: true }} />
       </TarjetaGrafico>
     </div>
   );

@@ -1,18 +1,18 @@
 import React, { ReactNode, useEffect, useRef, useState } from 'react';
 import { tema } from './tema';
 
-// Ancho disponible del contenedor (los gráficos se dibujan en SVG a ese ancho).
-export function useAncho<T extends HTMLElement>(): [React.RefObject<T | null>, number] {
+// Tamaño disponible del contenedor: los gráficos se dibujan en SVG a esa medida.
+export function useTamano<T extends HTMLElement>(): [React.RefObject<T | null>, { ancho: number; alto: number }] {
   const ref = useRef<T>(null);
-  const [ancho, setAncho] = useState(0);
+  const [tamano, setTamano] = useState({ ancho: 0, alto: 0 });
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const obs = new ResizeObserver(([e]) => setAncho(Math.floor(e.contentRect.width)));
+    const obs = new ResizeObserver(([e]) => setTamano({ ancho: Math.floor(e.contentRect.width), alto: Math.floor(e.contentRect.height) }));
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
-  return [ref, ancho];
+  return [ref, tamano];
 }
 
 // ---------- Tooltip ----------
@@ -76,6 +76,8 @@ export const IconoEstado: React.FC<{ tipo: 'bien' | 'alerta' | 'neutro' | 'criti
 };
 
 // ---------- Tarjeta de gráfico ----------
+// Ocupa el alto que le da la grilla (en pantallas grandes) y el cuerpo se estira para llenarlo.
+// En celular el cuerpo tiene un alto mínimo y la página scrollea normalmente.
 
 export const TarjetaGrafico: React.FC<{
   titulo: string;
@@ -84,15 +86,16 @@ export const TarjetaGrafico: React.FC<{
   tabla?: ReactNode;
   actualizando?: boolean;
   className?: string;
+  cuerpoClassName?: string; // alto mínimo en celular
   children: ReactNode;
-}> = ({ titulo, subtitulo, leyenda, tabla, actualizando, className = '', children }) => {
+}> = ({ titulo, subtitulo, leyenda, tabla, actualizando, className = '', cuerpoClassName = 'min-h-[15rem]', children }) => {
   const [verTabla, setVerTabla] = useState(false);
   return (
-    <section className={`min-w-0 rounded-xl border border-black/5 bg-white p-4 shadow-sm sm:p-5 ${className}`}>
-      <header className="mb-3 flex flex-wrap items-start justify-between gap-2">
+    <section className={`flex min-h-0 min-w-0 flex-col rounded-xl border border-black/5 bg-white p-3 shadow-sm lg:p-4 ${className}`}>
+      <header className="mb-2 flex shrink-0 items-start justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="text-base font-semibold text-slate-900">{titulo}</h3>
-          {subtitulo && <p className="mt-0.5 text-sm text-slate-500">{subtitulo}</p>}
+          <h3 className="text-sm font-semibold text-slate-900">{titulo}</h3>
+          {subtitulo && <p className="mt-0.5 text-xs text-slate-500">{subtitulo}</p>}
         </div>
         {tabla && (
           <button
@@ -105,9 +108,9 @@ export const TarjetaGrafico: React.FC<{
           </button>
         )}
       </header>
-      {leyenda && !verTabla && <div className="mb-3">{leyenda}</div>}
-      <div className={`transition-opacity duration-200 ${actualizando ? 'opacity-50' : ''}`}>
-        {verTabla ? tabla : children}
+      {leyenda && !verTabla && <div className="mb-2 shrink-0">{leyenda}</div>}
+      <div className={`relative flex-1 transition-opacity duration-200 lg:min-h-0 ${cuerpoClassName} ${actualizando ? 'opacity-50' : ''}`}>
+        {verTabla ? <div className="absolute inset-0 overflow-auto">{tabla}</div> : children}
       </div>
     </section>
   );
@@ -121,13 +124,21 @@ export const Indicador: React.FC<{
   detalle?: ReactNode;
   icono?: ReactNode;
 }> = ({ etiqueta, valor, detalle, icono }) => (
-  <div className="rounded-xl border border-black/5 bg-white p-4 shadow-sm">
-    <div className="flex items-center gap-1.5 text-sm text-slate-500">{icono}{etiqueta}</div>
-    <div className="mt-1 text-2xl font-semibold text-slate-900">{valor}</div>
-    {detalle && <div className="mt-0.5 text-xs text-slate-500">{detalle}</div>}
+  <div className="min-w-0 rounded-xl border border-black/5 bg-white px-3 py-2.5 shadow-sm">
+    <div className="flex items-center gap-1.5 truncate text-xs text-slate-500">{icono}{etiqueta}</div>
+    <div className="mt-0.5 truncate text-xl font-semibold text-slate-900">{valor}</div>
+    {detalle && <div className="truncate text-[11px] text-slate-500">{detalle}</div>}
   </div>
 );
 
+// Mensaje dentro del cuerpo de una tarjeta.
 export const SinDatos: React.FC<{ texto: string }> = ({ texto }) => (
-  <p className="py-10 text-center text-sm text-slate-500">{texto}</p>
+  <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-sm text-slate-500">{texto}</div>
+);
+
+// Mensaje que ocupa toda la vista.
+export const VistaVacia: React.FC<{ texto: string }> = ({ texto }) => (
+  <div className="flex h-full min-h-[12rem] items-center justify-center rounded-xl border border-black/5 bg-white p-6 text-center text-sm text-slate-500 shadow-sm">
+    {texto}
+  </div>
 );
