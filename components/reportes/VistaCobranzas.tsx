@@ -23,7 +23,10 @@ export const ChipEstado: React.FC<{ estado: EstadoCobranza }> = ({ estado }) => 
   </span>
 );
 
+export type SeccionCobranzas = 'resumen' | 'obras' | 'deuda';
+
 interface Props {
+  seccion: SeccionCobranzas;
   facturas: FacturaAnalizada[];
   rango: Rango;
   calidad: CalidadDatos;
@@ -34,7 +37,7 @@ interface Props {
 }
 
 export const VistaCobranzas: React.FC<Props> = ({
-  facturas, rango, calidad, obrasSeleccionadas, onAlternarObraSocial, nombreTerapeuta, actualizando,
+  seccion, facturas, rango, calidad, obrasSeleccionadas, onAlternarObraSocial, nombreTerapeuta, actualizando,
 }) => {
   const resumen = useMemo(() => resumirCobranza(facturas), [facturas]);
   const meses = useMemo(() => cobranzaPorMes(facturas, rango), [facturas, rango]);
@@ -80,6 +83,117 @@ export const VistaCobranzas: React.FC<Props> = ({
     calidad.pagoAntesDeEmision > 0 && `${calidad.pagoAntesDeEmision} facturas tienen fecha de pago anterior a la de emisión: se cuentan como cobradas en el día.`,
     calidad.sinFechaEmision > 0 && `${calidad.sinFechaEmision} facturas sin fecha de emisión no se incluyen.`,
   ].filter(Boolean) as string[];
+
+  if (seccion === 'obras') {
+    return (
+      <div className="space-y-5">
+        <TarjetaGrafico
+          titulo="Días promedio de cobro por obra social"
+          subtitulo="Desde la emisión hasta el pago. Tocá una barra para filtrar por esa obra social."
+          actualizando={actualizando}
+          leyenda={rankingCobro.length > 0 && <Leyenda items={[{ color: tema.serie, etiqueta: 'Supera el plazo' }, { color: tema.atenuado, etiqueta: 'Dentro del plazo' }]} />}
+          tabla={
+            <TablaDatos
+              columnas={[columnasObra[0], columnasObra[6], columnasObra[7], columnasObra[1]]}
+              filas={rankingCobro}
+              claveFila={o => o.id}
+              orden={{ clave: 'dias', desc: true }}
+            />
+          }
+        >
+          {rankingCobro.length ? (
+            <BarrasHorizontales
+              filas={rankingCobro.map(o => ({
+                clave: o.id,
+                etiqueta: o.nombre,
+                valor: o.diasPromCobro,
+                color: o.diasPromCobro !== null && o.diasPromCobro > o.plazo ? tema.serie : tema.atenuado,
+                seleccionada: obrasSeleccionadas.includes(o.id),
+                tooltip: (
+                  <>
+                    <div className="mb-1 text-xs font-medium text-slate-500">{o.nombre}</div>
+                    <FilaTooltip etiqueta="días promedio de cobro" valor={fmt.dias(o.diasPromCobro)} fuerte />
+                    <FilaTooltip etiqueta="cobradas en plazo" valor={fmt.pct(o.pctEnPlazo)} />
+                    <FilaTooltip etiqueta="pendiente" valor={fmt.moneda(o.pendiente)} />
+                    <FilaTooltip etiqueta="facturas" valor={fmt.entero(o.cantidad)} />
+                  </>
+                ),
+              }))}
+              formatoValor={v => `${fmt.decimal(v)} d`}
+              referencia={{ valor: plazoHabitual, etiqueta: `Plazo ${plazoHabitual} d` }}
+              onClickFila={onAlternarObraSocial}
+            />
+          ) : <SinDatos texto="No hay facturas cobradas con estos filtros." />}
+        </TarjetaGrafico>
+
+        <TarjetaGrafico titulo="Resumen por obra social" subtitulo="Tocá un encabezado para ordenar">
+          <TablaDatos columnas={columnasObra} filas={porObra} claveFila={o => o.id} orden={{ clave: 'facturado', desc: true }} />
+        </TarjetaGrafico>
+      </div>
+    );
+  }
+
+  if (seccion === 'deuda') {
+    return (
+      <div className="space-y-5">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <Indicador
+            etiqueta="Deuda vencida"
+            icono={<IconoEstado tipo="critico" />}
+            valor={fmt.monedaCompacta(resumen.vencido)}
+            detalle={`${fmt.entero(resumen.cantVencidas)} facturas vencidas`}
+          />
+          <Indicador etiqueta="Pendiente de cobro" valor={fmt.monedaCompacta(resumen.pendiente)} detalle={`${fmt.entero(impagas.length)} facturas impagas`} />
+          <Indicador etiqueta="Mayor atraso" valor={resumen.mayorAtraso ? `${fmt.entero(resumen.mayorAtraso)} días` : '—'} detalle={masAtrasada && masAtrasada.diasAtraso > 0 ? masAtrasada.obraSocial : undefined} />
+          <Indicador
+            etiqueta="Atraso promedio"
+            valor={resumen.cantVencidas ? `${fmt.entero(impagas.filter(f => f.estado === 'vencida').reduce((s, f) => s + f.diasAtraso, 0) / resumen.cantVencidas)} días` : '—'}
+            detalle="De las facturas vencidas"
+          />
+        </div>
+
+        <TarjetaGrafico
+          titulo="Antigüedad de la deuda impaga"
+          subtitulo="Monto sin cobrar según los días que pasaron desde el vencimiento"
+          actualizando={actualizando}
+          tabla={
+            <TablaDatos
+              columnas={[
+                { clave: 'etiqueta', titulo: 'Tramo', valor: t => t.etiqueta },
+                { clave: 'monto', titulo: 'Monto', valor: t => t.monto, mostrar: t => fmt.moneda(t.monto), numerica: true },
+                { clave: 'cantidad', titulo: 'Facturas', valor: t => t.cantidad, numerica: true },
+              ]}
+              filas={tramos}
+              claveFila={t => t.id}
+            />
+          }
+        >
+          {impagas.length ? (
+            <ColumnasApiladas
+              categorias={tramos.map(t => ({ clave: t.id, etiqueta: t.etiqueta }))}
+              series={[{ clave: 'monto', etiqueta: 'sin cobrar', color: tema.ordinal[2] }]}
+              valores={tramos.map(t => ({ monto: t.monto }))}
+              colorCategoria={i => tema.ordinal[i]}
+              formatoValor={fmt.moneda}
+              formatoEje={fmt.monedaCompacta}
+              extraTooltip={i => <div className="mt-1 text-xs text-slate-500">{fmt.entero(tramos[i].cantidad)} facturas</div>}
+            />
+          ) : <SinDatos texto="No hay deuda impaga para estos filtros." />}
+        </TarjetaGrafico>
+
+        <TarjetaGrafico titulo="Facturas impagas" subtitulo="Ordenadas por días de atraso">
+          <TablaDatos
+            columnas={columnasImpagas}
+            filas={impagas}
+            claveFila={f => f.id}
+            orden={{ clave: 'atraso', desc: true }}
+            maxFilas={15}
+            vacio="No hay facturas impagas para estos filtros."
+          />
+        </TarjetaGrafico>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -149,91 +263,6 @@ export const VistaCobranzas: React.FC<Props> = ({
           formatoEje={fmt.monedaCompacta}
           etiquetaTotal="Facturado"
           extraTooltip={i => <div className="mt-1 text-xs text-slate-500">{fmt.entero(meses[i].cantidad)} facturas · {fmt.entero(meses[i].sesiones)} sesiones</div>}
-        />
-      </TarjetaGrafico>
-
-      <div className="grid gap-5 lg:grid-cols-2">
-        <TarjetaGrafico
-          titulo="Días promedio de cobro por obra social"
-          subtitulo="Desde la emisión hasta el pago. Tocá una barra para filtrar por esa obra social."
-          actualizando={actualizando}
-          leyenda={rankingCobro.length > 0 && <Leyenda items={[{ color: tema.serie, etiqueta: 'Supera el plazo' }, { color: tema.atenuado, etiqueta: 'Dentro del plazo' }]} />}
-          tabla={
-            <TablaDatos
-              columnas={[columnasObra[0], columnasObra[6], columnasObra[7], columnasObra[1]]}
-              filas={rankingCobro}
-              claveFila={o => o.id}
-              orden={{ clave: 'dias', desc: true }}
-            />
-          }
-        >
-          {rankingCobro.length ? (
-            <BarrasHorizontales
-              filas={rankingCobro.map(o => ({
-                clave: o.id,
-                etiqueta: o.nombre,
-                valor: o.diasPromCobro,
-                color: o.diasPromCobro !== null && o.diasPromCobro > o.plazo ? tema.serie : tema.atenuado,
-                seleccionada: obrasSeleccionadas.includes(o.id),
-                tooltip: (
-                  <>
-                    <div className="mb-1 text-xs font-medium text-slate-500">{o.nombre}</div>
-                    <FilaTooltip etiqueta="días promedio de cobro" valor={fmt.dias(o.diasPromCobro)} fuerte />
-                    <FilaTooltip etiqueta="cobradas en plazo" valor={fmt.pct(o.pctEnPlazo)} />
-                    <FilaTooltip etiqueta="pendiente" valor={fmt.moneda(o.pendiente)} />
-                    <FilaTooltip etiqueta="facturas" valor={fmt.entero(o.cantidad)} />
-                  </>
-                ),
-              }))}
-              formatoValor={v => `${fmt.decimal(v)} d`}
-              referencia={{ valor: plazoHabitual, etiqueta: `Plazo ${plazoHabitual} d` }}
-              onClickFila={onAlternarObraSocial}
-            />
-          ) : <SinDatos texto="No hay facturas cobradas con estos filtros." />}
-        </TarjetaGrafico>
-
-        <TarjetaGrafico
-          titulo="Antigüedad de la deuda impaga"
-          subtitulo="Monto sin cobrar según los días que pasaron desde el vencimiento"
-          actualizando={actualizando}
-          tabla={
-            <TablaDatos
-              columnas={[
-                { clave: 'etiqueta', titulo: 'Tramo', valor: t => t.etiqueta },
-                { clave: 'monto', titulo: 'Monto', valor: t => t.monto, mostrar: t => fmt.moneda(t.monto), numerica: true },
-                { clave: 'cantidad', titulo: 'Facturas', valor: t => t.cantidad, numerica: true },
-              ]}
-              filas={tramos}
-              claveFila={t => t.id}
-            />
-          }
-        >
-          {impagas.length ? (
-            <ColumnasApiladas
-              categorias={tramos.map(t => ({ clave: t.id, etiqueta: t.etiqueta }))}
-              series={[{ clave: 'monto', etiqueta: 'sin cobrar', color: tema.ordinal[2] }]}
-              valores={tramos.map(t => ({ monto: t.monto }))}
-              colorCategoria={i => tema.ordinal[i]}
-              formatoValor={fmt.moneda}
-              formatoEje={fmt.monedaCompacta}
-              extraTooltip={i => <div className="mt-1 text-xs text-slate-500">{fmt.entero(tramos[i].cantidad)} facturas</div>}
-            />
-          ) : <SinDatos texto="No hay deuda impaga para estos filtros." />}
-        </TarjetaGrafico>
-      </div>
-
-      <TarjetaGrafico titulo="Resumen por obra social" subtitulo="Tocá un encabezado para ordenar">
-        <TablaDatos columnas={columnasObra} filas={porObra} claveFila={o => o.id} orden={{ clave: 'facturado', desc: true }} />
-      </TarjetaGrafico>
-
-      <TarjetaGrafico titulo="Facturas impagas" subtitulo="Ordenadas por días de atraso">
-        <TablaDatos
-          columnas={columnasImpagas}
-          filas={impagas}
-          claveFila={f => f.id}
-          orden={{ clave: 'atraso', desc: true }}
-          maxFilas={15}
-          vacio="No hay facturas impagas para estos filtros."
         />
       </TarjetaGrafico>
 

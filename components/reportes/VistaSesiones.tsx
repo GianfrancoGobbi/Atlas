@@ -13,7 +13,10 @@ const ETIQUETA_ESTADO_TURNO: Record<string, string> = {
   pendiente: 'Pendientes', confirmado: 'Confirmados', finalizado: 'Finalizados', cancelado: 'Cancelados',
 };
 
+export type SeccionSesiones = 'sesiones' | 'turnos';
+
 interface Props {
+  seccion: SeccionSesiones;
   facturas: FacturaAnalizada[];
   turnos: TurnoAnalizado[];
   rango: Rango;
@@ -24,7 +27,7 @@ interface Props {
 }
 
 export const VistaSesiones: React.FC<Props> = ({
-  facturas, turnos, rango, obrasSeleccionadas, onAlternarObraSocial, avisoFiltrosNoAplican, actualizando,
+  seccion, facturas, turnos, rango, obrasSeleccionadas, onAlternarObraSocial, avisoFiltrosNoAplican, actualizando,
 }) => {
   const meses = useMemo(() => cobranzaPorMes(facturas, rango), [facturas, rango]);
   const porObra = useMemo(
@@ -37,18 +40,97 @@ export const VistaSesiones: React.FC<Props> = ({
   const totalSesiones = facturas.reduce((s, f) => s + f.sesiones, 0);
   const mesesConSesiones = meses.filter(m => m.sesiones > 0).length;
 
+  if (seccion === 'turnos') {
+    return (
+      <div className="space-y-5">
+        {avisoFiltrosNoAplican && (
+          <p className="text-sm text-slate-500">
+            Los turnos no tienen obra social ni estado de pago: esos dos filtros no se aplican a los gráficos de turnos.
+          </p>
+        )}
+
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+          <Indicador etiqueta="Turnos agendados" valor={fmt.entero(resumenTurnos.total)} detalle={`${fmt.decimal(resumenTurnos.horasAgendadas)} horas`} />
+          <Indicador etiqueta="Duración promedio" valor={resumenTurnos.duracionProm === null ? '—' : `${fmt.entero(resumenTurnos.duracionProm)} min`} />
+          <Indicador etiqueta="Turnos cancelados" valor={fmt.pct(resumenTurnos.pctCancelados)} />
+        </div>
+
+        <div className="grid gap-5 lg:grid-cols-3">
+          <TarjetaGrafico
+            className="lg:col-span-2"
+            titulo="Turnos por día y horario"
+            subtitulo="Cuándo se concentran los turnos agendados"
+            actualizando={actualizando}
+            tabla={
+              <TablaDatos
+                columnas={[
+                  { clave: 'dia', titulo: 'Día', valor: (f: { dia: string; i: number }) => f.i, mostrar: f => f.dia },
+                  ...grilla.horas.map((h, j) => ({
+                    clave: String(h), titulo: `${h} h`, valor: (f: { dia: string; i: number }) => grilla.celdas[f.i][j], numerica: true,
+                  })),
+                ]}
+                filas={DIAS_SEMANA.map((dia, i) => ({ dia, i }))}
+                claveFila={f => f.dia}
+              />
+            }
+          >
+            {turnos.length ? (
+              <MapaDeCalor
+                filas={DIAS_SEMANA}
+                columnas={grilla.horas}
+                celdas={grilla.celdas}
+                formatoColumna={h => `${h} h`}
+                unidad={n => `${n} ${n === 1 ? 'turno' : 'turnos'}`}
+              />
+            ) : <SinDatos texto="No hay turnos en este período." />}
+          </TarjetaGrafico>
+
+          <TarjetaGrafico
+            titulo="Turnos por estado"
+            actualizando={actualizando}
+            tabla={
+              <TablaDatos
+                columnas={[
+                  { clave: 'estado', titulo: 'Estado', valor: e => ETIQUETA_ESTADO_TURNO[e.estado] ?? e.estado },
+                  { clave: 'cantidad', titulo: 'Turnos', valor: e => e.cantidad, numerica: true },
+                ]}
+                filas={resumenTurnos.porEstado}
+                claveFila={e => e.estado}
+              />
+            }
+          >
+            {turnos.length ? (
+              <BarrasHorizontales
+                filas={resumenTurnos.porEstado.map(e => ({
+                  clave: e.estado,
+                  etiqueta: ETIQUETA_ESTADO_TURNO[e.estado] ?? e.estado,
+                  valor: e.cantidad,
+                  color: tema.serie,
+                  tooltip: <FilaTooltip etiqueta={ETIQUETA_ESTADO_TURNO[e.estado] ?? e.estado} valor={fmt.entero(e.cantidad)} fuerte />,
+                }))}
+                formatoValor={fmt.entero}
+              />
+            ) : <SinDatos texto="No hay turnos en este período." />}
+          </TarjetaGrafico>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <Indicador etiqueta="Sesiones facturadas" valor={fmt.entero(totalSesiones)} detalle={`${fmt.entero(facturas.length)} facturas`} />
         <Indicador
           etiqueta="Sesiones por mes"
           valor={mesesConSesiones ? fmt.decimal(totalSesiones / mesesConSesiones) : '—'}
           detalle="Promedio de los meses con actividad"
         />
-        <Indicador etiqueta="Turnos agendados" valor={fmt.entero(resumenTurnos.total)} detalle={`${fmt.decimal(resumenTurnos.horasAgendadas)} horas`} />
-        <Indicador etiqueta="Duración promedio" valor={resumenTurnos.duracionProm === null ? '—' : `${fmt.entero(resumenTurnos.duracionProm)} min`} />
-        <Indicador etiqueta="Turnos cancelados" valor={fmt.pct(resumenTurnos.pctCancelados)} />
+        <Indicador
+          etiqueta="Facturado por sesión"
+          valor={totalSesiones ? fmt.moneda(facturas.reduce((s, f) => s + f.monto, 0) / totalSesiones) : '—'}
+          detalle="Promedio del período"
+        />
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
@@ -117,71 +199,6 @@ export const VistaSesiones: React.FC<Props> = ({
               onClickFila={onAlternarObraSocial}
             />
           ) : <SinDatos texto="No hay sesiones facturadas para estos filtros." />}
-        </TarjetaGrafico>
-      </div>
-
-      {avisoFiltrosNoAplican && (
-        <p className="text-sm text-slate-500">
-          Los turnos no tienen obra social ni estado de pago: esos dos filtros no se aplican a los gráficos de turnos.
-        </p>
-      )}
-
-      <div className="grid gap-5 lg:grid-cols-3">
-        <TarjetaGrafico
-          className="lg:col-span-2"
-          titulo="Turnos por día y horario"
-          subtitulo="Cuándo se concentran los turnos agendados"
-          actualizando={actualizando}
-          tabla={
-            <TablaDatos
-              columnas={[
-                { clave: 'dia', titulo: 'Día', valor: (f: { dia: string; i: number }) => f.i, mostrar: f => f.dia },
-                ...grilla.horas.map((h, j) => ({
-                  clave: String(h), titulo: `${h} h`, valor: (f: { dia: string; i: number }) => grilla.celdas[f.i][j], numerica: true,
-                })),
-              ]}
-              filas={DIAS_SEMANA.map((dia, i) => ({ dia, i }))}
-              claveFila={f => f.dia}
-            />
-          }
-        >
-          {turnos.length ? (
-            <MapaDeCalor
-              filas={DIAS_SEMANA}
-              columnas={grilla.horas}
-              celdas={grilla.celdas}
-              formatoColumna={h => `${h} h`}
-              unidad={n => `${n} ${n === 1 ? 'turno' : 'turnos'}`}
-            />
-          ) : <SinDatos texto="No hay turnos en este período." />}
-        </TarjetaGrafico>
-
-        <TarjetaGrafico
-          titulo="Turnos por estado"
-          actualizando={actualizando}
-          tabla={
-            <TablaDatos
-              columnas={[
-                { clave: 'estado', titulo: 'Estado', valor: e => ETIQUETA_ESTADO_TURNO[e.estado] ?? e.estado },
-                { clave: 'cantidad', titulo: 'Turnos', valor: e => e.cantidad, numerica: true },
-              ]}
-              filas={resumenTurnos.porEstado}
-              claveFila={e => e.estado}
-            />
-          }
-        >
-          {turnos.length ? (
-            <BarrasHorizontales
-              filas={resumenTurnos.porEstado.map(e => ({
-                clave: e.estado,
-                etiqueta: ETIQUETA_ESTADO_TURNO[e.estado] ?? e.estado,
-                valor: e.cantidad,
-                color: tema.serie,
-                tooltip: <FilaTooltip etiqueta={ETIQUETA_ESTADO_TURNO[e.estado] ?? e.estado} valor={fmt.entero(e.cantidad)} fuerte />,
-              }))}
-              formatoValor={fmt.entero}
-            />
-          ) : <SinDatos texto="No hay turnos en este período." />}
         </TarjetaGrafico>
       </div>
     </div>

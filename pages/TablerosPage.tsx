@@ -5,8 +5,8 @@ import { UserRole } from '../types';
 import { Spinner } from '../components/shared/Spinner';
 import { Alert } from '../components/shared/Alert';
 import { BarraFiltros } from '../components/reportes/BarraFiltros';
-import { VistaCobranzas } from '../components/reportes/VistaCobranzas';
-import { VistaSesiones } from '../components/reportes/VistaSesiones';
+import { SeccionCobranzas, VistaCobranzas } from '../components/reportes/VistaCobranzas';
+import { SeccionSesiones, VistaSesiones } from '../components/reportes/VistaSesiones';
 import { VistaTerapeutas } from '../components/reportes/VistaTerapeutas';
 import { DatosTableros, reportesService } from '../services/reportesService';
 import {
@@ -15,6 +15,20 @@ import {
 } from '../utils/reportes';
 
 type Vista = 'cobranzas' | 'sesiones' | 'terapeutas';
+
+// Subpestañas de cada pestaña (la primera es la de entrada).
+const SUBVISTAS: Record<Vista, { id: string; etiqueta: string }[]> = {
+  cobranzas: [
+    { id: 'resumen', etiqueta: 'Resumen' },
+    { id: 'obras', etiqueta: 'Por obra social' },
+    { id: 'deuda', etiqueta: 'Deuda impaga' },
+  ],
+  sesiones: [
+    { id: 'sesiones', etiqueta: 'Sesiones' },
+    { id: 'turnos', etiqueta: 'Turnos' },
+  ],
+  terapeutas: [],
+};
 
 // ---------- Filtros en la URL (se pueden compartir o guardar como favorito) ----------
 
@@ -35,9 +49,10 @@ function leerFiltros(p: URLSearchParams): Filtros {
   };
 }
 
-function aParams(f: Filtros, vista: Vista): URLSearchParams {
+function aParams(f: Filtros, vista: Vista, sub?: string): URLSearchParams {
   const p = new URLSearchParams();
   if (vista !== 'cobranzas') p.set('vista', vista);
+  if (sub && sub !== SUBVISTAS[vista][0]?.id) p.set('sub', sub);
   if (f.preset !== FILTROS_INICIALES.preset) p.set('periodo', f.preset);
   if (f.preset === 'personalizado') {
     if (f.desde) p.set('desde', f.desde);
@@ -103,6 +118,8 @@ export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, er
   const filtros = useMemo(() => leerFiltros(params), [params]);
   const vistaParam = params.get('vista');
   const vista: Vista = vistaParam === 'sesiones' || (vistaParam === 'terapeutas' && esAdmin) ? vistaParam : 'cobranzas';
+  const subvistas = SUBVISTAS[vista];
+  const sub = subvistas.find(s => s.id === params.get('sub'))?.id ?? subvistas[0]?.id;
 
   const hoy = useMemo(() => hoyDia(), [actualizado]);
   const base = useMemo(() => {
@@ -131,8 +148,9 @@ export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, er
     return [...ids].map(id => ({ id, nombre: nombrePersona(id) })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   }, [base, esAdmin, nombrePersona]);
 
-  const actualizarFiltros = (f: Filtros) => setParams(aParams(f, vista), { replace: true });
+  const actualizarFiltros = (f: Filtros) => setParams(aParams(f, vista, sub), { replace: true });
   const cambiarVista = (v: Vista) => setParams(aParams(filtros, v), { replace: true });
+  const cambiarSub = (s: string) => setParams(aParams(filtros, vista, s), { replace: true });
   const alternar = (campo: 'obrasSociales' | 'terapeutas') => (id: string) => {
     const actual = filtros[campo];
     actualizarFiltros({ ...filtros, [campo]: actual.includes(id) ? actual.filter(x => x !== id) : [...actual, id] });
@@ -146,11 +164,8 @@ export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, er
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-semibold text-primary-dark">Tableros</h1>
-          <p className="mt-1 text-sm text-slate-500">{esAdmin ? 'Todo el consultorio' : 'Tus turnos y facturas'}</p>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-3xl font-semibold text-primary-dark">Tableros</h1>
         <div className="flex items-center gap-3 text-sm text-slate-500">
           {actualizado && <span>Actualizado {horaCorta.format(actualizado)}</span>}
           <button
@@ -183,6 +198,24 @@ export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, er
         ))}
       </nav>
 
+      {subvistas.length > 1 && (
+        <nav className="inline-flex max-w-full gap-1 overflow-x-auto rounded-lg bg-slate-200/60 p-1" aria-label="Subsecciones">
+          {subvistas.map(s => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => cambiarSub(s.id)}
+              aria-current={sub === s.id ? 'page' : undefined}
+              className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                sub === s.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              {s.etiqueta}
+            </button>
+          ))}
+        </nav>
+      )}
+
       <BarraFiltros
         filtros={filtros}
         onCambio={actualizarFiltros}
@@ -198,6 +231,7 @@ export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, er
 
       {base && vista === 'cobranzas' && (
         <VistaCobranzas
+          seccion={sub as SeccionCobranzas}
           facturas={facturas}
           rango={rango}
           calidad={base.calidad}
@@ -209,6 +243,7 @@ export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, er
       )}
       {base && vista === 'sesiones' && (
         <VistaSesiones
+          seccion={sub as SeccionSesiones}
           facturas={facturas}
           turnos={turnos}
           rango={rango}
