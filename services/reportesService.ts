@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabaseClient';
-import type { AreaRaw, FacturaRaw, ObraSocialRaw, PersonaRaw, TurnoRaw } from '../utils/reportes';
+import type { AreaRaw, FacturaPacienteRaw, FacturaRaw, HistorialRaw, ObraSocialRaw, PersonaRaw, TurnoRaw } from '../utils/reportes';
 
 // Datos de los tableros. El RLS de Supabase decide qué filas llegan:
 // administración recibe todo el consultorio y cada terapeuta solo lo suyo.
@@ -26,14 +26,16 @@ export interface DatosTableros {
   turnos: TurnoRaw[];
   terapeutas: PersonaRaw[];
   areas: AreaRaw[];
+  facturaPacientes: FacturaPacienteRaw[];
+  historial: HistorialRaw[];
 }
 
 export const reportesService = {
   cargar: async (): Promise<DatosTableros> => {
-    const [facturas, obrasSociales, turnos, terapeutas, areas] = await Promise.all([
+    const [facturas, obrasSociales, turnos, terapeutas, areas, facturaPacientes, historial] = await Promise.all([
       traerTodo<FacturaRaw>('facturas', 'id, terapeuta_id, obra_social_id, monto, estado, fecha_generada, fecha_pago, sesiones'),
       traerTodo<ObraSocialRaw>('obras_sociales', 'id, nombre, dias_vencimiento'),
-      traerTodo<TurnoRaw>('turnos', 'id, terapeuta_id, fecha_hora_inicio, fecha_hora_fin, estado, inicio_real, fin_real'),
+      traerTodo<TurnoRaw>('turnos', 'id, terapeuta_id, paciente_id, fecha_hora_inicio, fecha_hora_fin, estado, inicio_real, fin_real'),
       supabase
         .from('usuarios_perfil')
         .select('id, nombre, apellido, area_id')
@@ -46,7 +48,9 @@ export const reportesService = {
         if (error) throw error;
         return (data ?? []) as AreaRaw[];
       }),
+      traerTodo<FacturaPacienteRaw>('factura_pacientes', 'id, factura_id, paciente_id, sesiones, monto'),
+      traerTodo<HistorialRaw>('historial_clinico', 'id, paciente_id, terapeuta_id, fecha'),
     ]);
-    return { facturas, obrasSociales, turnos, terapeutas, areas };
+    return { facturas, obrasSociales, turnos, terapeutas, areas, facturaPacientes, historial };
   },
 };

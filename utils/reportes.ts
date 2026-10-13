@@ -22,6 +22,7 @@ export interface ObraSocialRaw {
 export interface TurnoRaw {
   id: string;
   terapeuta_id: string | null;
+  paciente_id?: string | null;
   fecha_hora_inicio: string | null;
   fecha_hora_fin: string | null;
   estado: string | null;
@@ -39,6 +40,21 @@ export interface PersonaRaw {
 export interface AreaRaw {
   id: string;
   nombre: string;
+}
+
+// Detalle de pacientes de cada factura (solo lo necesario para cruzar con la agenda).
+export interface FacturaPacienteRaw {
+  factura_id: string;
+  paciente_id: string | null;
+  sesiones: number | null;
+  monto: number | string | null;
+}
+
+// Solo fechas del historial clínico (nunca el texto): para medir si cada sesión tiene su evolución.
+export interface HistorialRaw {
+  paciente_id: string | null;
+  terapeuta_id: string | null;
+  fecha: string | null;
 }
 
 // Clave del grupo de terapeutas sin área asignada.
@@ -363,6 +379,7 @@ export const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 export interface TurnoAnalizado {
   id: string;
   terapeutaId: string | null;
+  pacienteId: string | null;
   dia: number;
   diaSemana: number; // 0 = lunes
   hora: number; // hora local, tal como se guardó
@@ -405,6 +422,7 @@ export function analizarTurnos(filas: TurnoRaw[]): TurnoAnalizado[] {
       return {
         id: t.id,
         terapeutaId: t.terapeuta_id,
+        pacienteId: t.paciente_id ?? null,
         dia,
         diaSemana: (new Date(dia * DIA_MS).getUTCDay() + 6) % 7,
         hora: Math.floor(inicio / 60),

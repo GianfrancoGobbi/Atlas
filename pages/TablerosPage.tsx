@@ -9,13 +9,16 @@ import { SeccionCobranzas, VistaCobranzas } from '../components/reportes/VistaCo
 import { SeccionSesiones, VistaSesiones } from '../components/reportes/VistaSesiones';
 import { VistaTerapeutas } from '../components/reportes/VistaTerapeutas';
 import { VistaComparativas } from '../components/reportes/VistaComparativas';
+import { VistaRentabilidad } from '../components/reportes/VistaRentabilidad';
+import { VistaPacientes } from '../components/reportes/VistaPacientes';
+import { VistaAreas } from '../components/reportes/VistaAreas';
 import { DatosTableros, reportesService } from '../services/reportesService';
 import {
   analizarFacturas, analizarTurnos, AreaPorTerapeuta, SIN_AREA, CalidadDatos, FILTROS_INICIALES, FiltroEstado, Filtros, filtrarFacturas, filtrarTurnos,
   alCorte, hoyDia, PRESETS_PERIODO, PresetPeriodo, rangoAnioAnterior, rangoDeFiltros, unAnioAntes,
 } from '../utils/reportes';
 
-type Vista = SeccionCobranzas | SeccionSesiones | 'comparativas' | 'terapeutas';
+type Vista = SeccionCobranzas | SeccionSesiones | 'comparativas' | 'rentabilidad' | 'pacientes' | 'areas' | 'terapeutas';
 
 // Menú de vistas: todas a un clic, agrupadas por tema.
 const GRUPOS: { titulo: string; soloAdmin?: boolean; vistas: { id: Vista; etiqueta: string }[] }[] = [
@@ -34,7 +37,15 @@ const GRUPOS: { titulo: string; soloAdmin?: boolean; vistas: { id: Vista; etique
       { id: 'turnos', etiqueta: 'Turnos' },
     ],
   },
-  { titulo: 'Análisis', vistas: [{ id: 'comparativas', etiqueta: 'Comparativas' }] },
+  {
+    titulo: 'Análisis',
+    vistas: [
+      { id: 'comparativas', etiqueta: 'Comparativas' },
+      { id: 'rentabilidad', etiqueta: 'Rentabilidad real' },
+      { id: 'pacientes', etiqueta: 'Pacientes y riesgo' },
+      { id: 'areas', etiqueta: 'Por área' },
+    ],
+  },
   { titulo: 'Equipo', soloAdmin: true, vistas: [{ id: 'terapeutas', etiqueta: 'Por terapeuta' }] },
 ];
 
@@ -58,8 +69,12 @@ function leerFiltros(p: URLSearchParams): Filtros {
   };
 }
 
-function aParams(f: Filtros, vista: Vista): URLSearchParams {
+// Inflación mensual supuesta (editable en Rentabilidad real), en la URL como porcentaje.
+const INFLACION_POR_DEFECTO = 0.046;
+
+function aParams(f: Filtros, vista: Vista, inflacion?: number): URLSearchParams {
   const p = new URLSearchParams();
+  if (inflacion !== undefined && inflacion !== INFLACION_POR_DEFECTO) p.set('inf', String(Math.round(inflacion * 1000) / 10));
   if (vista !== 'resumen') p.set('vista', vista);
   if (f.preset !== FILTROS_INICIALES.preset) p.set('periodo', f.preset);
   if (f.preset === 'personalizado') {
@@ -222,9 +237,15 @@ export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, er
       .sort((a, b) => (a.id === SIN_AREA ? 1 : b.id === SIN_AREA ? -1 : a.nombre.localeCompare(b.nombre, 'es')));
   }, [base, datos, areaPorTerapeuta]);
 
-  const actualizarFiltros = (f: Filtros) => setParams(aParams(f, vista), { replace: true });
-  const cambiarVista = (v: Vista) => setParams(aParams(filtros, v), { replace: true });
-  const alternar = (campo: 'obrasSociales' | 'terapeutas') => (id: string) => {
+  const infParam = Number(params.get('inf'));
+  const inflacion = Number.isFinite(infParam) && infParam > 0 && infParam < 100 ? infParam / 100 : INFLACION_POR_DEFECTO;
+  const actualizarFiltros = (f: Filtros) => setParams(aParams(f, vista, inflacion), { replace: true });
+  const cambiarVista = (v: Vista) => setParams(aParams(filtros, v, inflacion), { replace: true });
+  const cambiarInflacion = (i: number) => setParams(aParams(filtros, vista, i), { replace: true });
+  // Para la vista por área: los mismos filtros salvo el de área (es una vista comparativa entre áreas).
+  const facturasSinArea = useMemo(() => (base ? filtrarFacturas(base.facturas, { ...filtros, areas: [] }, rango, areaPorTerapeuta) : []), [base, filtros, rango, areaPorTerapeuta]);
+  const turnosSinArea = useMemo(() => (base ? filtrarTurnos(base.turnos, { ...filtros, areas: [] }, rango, areaPorTerapeuta) : []), [base, filtros, rango, areaPorTerapeuta]);
+  const alternar = (campo: 'obrasSociales' | 'terapeutas' | 'areas') => (id: string) => {
     const actual = filtros[campo];
     actualizarFiltros({ ...filtros, [campo]: actual.includes(id) ? actual.filter(x => x !== id) : [...actual, id] });
   };
@@ -321,6 +342,34 @@ export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, er
               turnos={turnosTodos}
               hoy={hoy}
               filtroObraSocial={filtros.obrasSociales.length > 0}
+              actualizando={cargando}
+            />
+          )}
+          {base && vista === 'rentabilidad' && (
+            <VistaRentabilidad facturas={facturasTodas} hoy={hoy} inflacionMensual={inflacion} onCambiarInflacion={cambiarInflacion} actualizando={cargando} />
+          )}
+          {base && vista === 'pacientes' && datos && (
+            <VistaPacientes
+              turnos={turnosTodos}
+              facturas={facturasTodas}
+              facturaPacientes={datos.facturaPacientes}
+              historial={datos.historial}
+              personas={datos.terapeutas}
+              esAdmin={esAdmin}
+              hoy={hoy}
+              actualizando={cargando}
+            />
+          )}
+          {base && vista === 'areas' && datos && (
+            <VistaAreas
+              facturas={facturasSinArea}
+              turnos={turnosSinArea}
+              areas={datos.areas}
+              areaPorTerapeuta={areaPorTerapeuta}
+              areasSeleccionadas={filtros.areas}
+              onAlternarArea={alternar('areas')}
+              rango={rango}
+              hoy={hoy}
               actualizando={cargando}
             />
           )}
