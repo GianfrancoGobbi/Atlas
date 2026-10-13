@@ -9,7 +9,7 @@ import { fmt, tema } from '../charts/tema';
 import { etiquetaCategoria } from '../../services/costosService';
 import { AreaPorTerapeuta, AreaRaw, FacturaAnalizada, Rango, SIN_AREA } from '../../utils/reportes';
 import {
-  BaseIngresos, CostoAnalizado, costosEnRango, resultadoPorArea, FilaResultadoArea, resumirResultado, serieResultado,
+  BaseIngresos, CostoAnalizado, costosEnRango, mesConCostos, MesResultado, resultadoPorArea, FilaResultadoArea, resumirResultado, serieResultado,
 } from '../../utils/resultado';
 
 const GRILLA = 'grid min-h-0 flex-1 gap-3 lg:grid-rows-[minmax(0,1fr)]';
@@ -63,6 +63,13 @@ export const VistaResultado: React.FC<Props> = ({ facturas, costos, rango, hoy, 
   const signo = (n: number) => (n >= 0 ? '' : '−');
   const textoResultado = (n: number) => `${signo(n)}${fmt.monedaCompacta(Math.abs(n))}`;
   const bueno = r.resultado >= 0;
+  const hayComparables = r.mesesConCostos > 0;
+  const listaMeses = (ms: string[]) => ms.map(nombreMes).join(', ');
+  const notaExcluidos = r.mesesSinCostos.length
+    ? `Sin costos cargados, no entra${r.mesesSinCostos.length > 1 ? 'n' : ''} en los totales: ${listaMeses(r.mesesSinCostos)}.`
+    : '';
+  const sinCostos = (m: MesResultado) => !mesConCostos(m);
+  const textoResultadoMes = (m: MesResultado) => (sinCostos(m) ? '—' : `${signo(m.resultado)}${fmt.moneda(Math.abs(m.resultado))}`);
 
   const columnasArea: ColumnaTabla<FilaResultadoArea>[] = [
     { clave: 'area', titulo: 'Área', valor: a => nombreArea(a.id) },
@@ -75,14 +82,23 @@ export const VistaResultado: React.FC<Props> = ({ facturas, costos, rango, hoy, 
 
   return (
     <div className="flex h-full flex-col gap-3">
+      {!hayComparables ? (
+        <p className="shrink-0 rounded-xl border border-black/5 bg-white p-4 text-sm text-slate-600 shadow-sm">
+          No hay costos cargados para los meses de este período, así que no se puede calcular el resultado. {notaExcluidos}
+        </p>
+      ) : (
       <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Indicador etiqueta={base === 'devengado' ? 'Ingresos (facturado)' : 'Ingresos (cobrado)'} valor={fmt.monedaCompacta(r.ingresos)} detalle={`${fmt.entero(serie.length)} meses`} />
-        <Indicador etiqueta="Costos" valor={fmt.monedaCompacta(r.costos)} detalle={`${r.mesesConCostos} meses con costos cargados`} />
+        <Indicador
+          etiqueta={base === 'devengado' ? 'Ingresos (facturado)' : 'Ingresos (cobrado)'}
+          valor={fmt.monedaCompacta(r.ingresos)}
+          detalle={`${r.mesesConCostos} ${r.mesesConCostos === 1 ? 'mes' : 'meses'} con costos${r.mesesSinCostos.length ? ` (sin ${listaMeses(r.mesesSinCostos)})` : ''}`}
+        />
+        <Indicador etiqueta="Costos" valor={fmt.monedaCompacta(r.costos)} detalle={`Promedio: ${r.costoMensualProm === null ? '—' : fmt.monedaCompacta(r.costoMensualProm)} por mes`} />
         <Indicador
           etiqueta="Resultado"
           icono={<IconoEstado tipo={bueno ? 'bien' : 'critico'} />}
           valor={<span className={claseDelta({ texto: '', bueno })}>{textoResultado(r.resultado)}</span>}
-          detalle={bueno ? 'Ganancia del período' : 'Pérdida del período'}
+          detalle={bueno ? 'Ganancia de los meses con costos' : 'Pérdida de los meses con costos'}
         />
         <Indicador etiqueta="Margen" valor={fmt.pct(r.margen)} detalle="Resultado sobre ingresos" />
         <Indicador
@@ -92,18 +108,19 @@ export const VistaResultado: React.FC<Props> = ({ facturas, costos, rango, hoy, 
         />
         <Indicador
           etiqueta="Punto de equilibrio"
-          valor={r.equilibrioSesionesMes === null ? '—' : `${fmt.entero(r.equilibrioSesionesMes)} ses./mes`}
-          detalle={r.sesionesMesProm === null ? undefined : `Hoy: ${fmt.entero(r.sesionesMesProm)} sesiones por mes`}
+          valor={r.equilibrioSesionesMes === null ? '—' : `${fmt.entero(Math.ceil(r.equilibrioSesionesMes))} ses./mes`}
+          detalle={r.sesionesMesProm === null ? undefined : `Promedio del período: ${fmt.entero(r.sesionesMesProm)} ses./mes`}
         />
       </div>
+      )}
 
       <div className={`${GRILLA} lg:grid-cols-3`}>
         <TarjetaGrafico
           className="lg:col-span-2"
           titulo="Ingresos y costos por mes"
           subtitulo={base === 'devengado'
-            ? 'Ingresos = facturado por mes de emisión. Los filtros de obra social, terapeuta y área no aplican a esta vista.'
-            : 'Ingresos = cobrado por mes de pago. Los filtros de obra social, terapeuta y área no aplican a esta vista.'}
+            ? `Ingresos = facturado por mes de emisión. ${notaExcluidos} Los filtros de obra social, terapeuta y área no aplican a esta vista.`
+            : `Ingresos = cobrado por mes de pago. ${notaExcluidos} Los filtros de obra social, terapeuta y área no aplican a esta vista.`}
           actualizando={actualizando}
           acciones={selector([{ id: 'devengado', etiqueta: 'Facturado' }, { id: 'percibido', etiqueta: 'Cobrado' }], base, id => setBase(id as BaseIngresos), 'Base de ingresos')}
           leyenda={<Leyenda items={[
@@ -116,8 +133,8 @@ export const VistaResultado: React.FC<Props> = ({ facturas, costos, rango, hoy, 
               columnas={[
                 { clave: 'mes', titulo: 'Mes', valor: (m: typeof serie[number]) => m.mes, mostrar: m => nombreMes(m.mes) },
                 { clave: 'ing', titulo: 'Ingresos', valor: m => m.ingresos, mostrar: m => fmt.moneda(m.ingresos), numerica: true },
-                { clave: 'cos', titulo: 'Costos', valor: m => m.costos, mostrar: m => fmt.moneda(m.costos), numerica: true },
-                { clave: 'res', titulo: 'Resultado', valor: m => m.resultado, mostrar: m => `${signo(m.resultado)}${fmt.moneda(Math.abs(m.resultado))}`, numerica: true },
+                { clave: 'cos', titulo: 'Costos', valor: m => m.costos, mostrar: m => (sinCostos(m) ? 'Sin cargar' : fmt.moneda(m.costos)), numerica: true },
+                { clave: 'res', titulo: 'Resultado', valor: m => (sinCostos(m) ? null : m.resultado), mostrar: textoResultadoMes, numerica: true },
               ]}
               filas={serie}
               claveFila={m => m.mes}
@@ -135,7 +152,7 @@ export const VistaResultado: React.FC<Props> = ({ facturas, costos, rango, hoy, 
               formatoEje={fmt.monedaCompacta}
               extraTooltip={i => (
                 <div className="mt-1 border-t border-slate-100 pt-1">
-                  <FilaTooltip etiqueta="resultado" valor={`${signo(serie[i].resultado)}${fmt.moneda(Math.abs(serie[i].resultado))}`} fuerte />
+                  <FilaTooltip etiqueta="resultado" valor={sinCostos(serie[i]) ? 'sin costos cargados' : textoResultadoMes(serie[i])} fuerte />
                 </div>
               )}
             />
@@ -144,7 +161,9 @@ export const VistaResultado: React.FC<Props> = ({ facturas, costos, rango, hoy, 
 
         <TarjetaGrafico
           titulo={desglose === 'categoria' ? 'Costos por categoría' : 'Resultado por área'}
-          subtitulo={desglose === 'categoria' ? 'Total del período' : 'Los costos comunes se reparten según lo facturado'}
+          subtitulo={desglose === 'categoria'
+            ? 'Total de los meses con costos'
+            : `Meses con costos. Ingresos ${base === 'devengado' ? 'facturados' : 'cobrados'}; los costos comunes se reparten según lo facturado`}
           actualizando={actualizando}
           acciones={selector([{ id: 'categoria', etiqueta: 'Categoría' }, { id: 'area', etiqueta: 'Área' }], desglose, id => setDesglose(id as 'categoria' | 'area'), 'Desglose')}
           cuerpoClassName="min-h-[16rem]"

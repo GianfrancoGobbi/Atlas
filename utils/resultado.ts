@@ -55,8 +55,13 @@ export function serieResultado(fs: FacturaAnalizada[], cs: CostoAnalizado[], ran
   return [...meses.values()].map(m => ({ ...m, resultado: m.ingresos - m.costos }));
 }
 
+// Un mes entra en el resultado solo si tiene costos cargados: un mes sin costos (típicamente el
+// mes en curso, que además tiene facturación parcial) sumaría ingresos sin sus costos e inflaría
+// el resultado y el margen.
+export const mesConCostos = (m: MesResultado) => m.costos > 0;
+
 export interface ResumenResultado {
-  ingresos: number;
+  ingresos: number; // solo meses con costos cargados
   costos: number;
   resultado: number;
   margen: number | null;
@@ -64,19 +69,19 @@ export interface ResumenResultado {
   costoPorSesion: number | null;
   ingresoPorSesion: number | null;
   mesesConCostos: number;
+  mesesSinCostos: string[]; // meses del período con movimientos pero sin costos: no entran en el resultado
   costoMensualProm: number | null;
-  sesionesMesProm: number | null;
+  sesionesMesProm: number | null; // promedio de sesiones por mes en los meses con costos
   equilibrioSesionesMes: number | null; // sesiones por mes necesarias para cubrir los costos
 }
 
 export function resumirResultado(serie: MesResultado[]): ResumenResultado {
-  const ingresos = serie.reduce((s, m) => s + m.ingresos, 0);
-  const costos = serie.reduce((s, m) => s + m.costos, 0);
-  const sesiones = serie.reduce((s, m) => s + m.sesiones, 0);
-  const conCostos = serie.filter(m => m.costos > 0);
-  const costoMensualProm = conCostos.length ? conCostos.reduce((s, m) => s + m.costos, 0) / conCostos.length : null;
+  const comparables = serie.filter(mesConCostos);
+  const ingresos = comparables.reduce((s, m) => s + m.ingresos, 0);
+  const costos = comparables.reduce((s, m) => s + m.costos, 0);
+  const sesiones = comparables.reduce((s, m) => s + m.sesiones, 0);
+  const costoMensualProm = comparables.length ? costos / comparables.length : null;
   const ingresoPorSesion = sesiones ? ingresos / sesiones : null;
-  const conSesiones = serie.filter(m => m.sesiones > 0);
   return {
     ingresos,
     costos,
@@ -85,9 +90,10 @@ export function resumirResultado(serie: MesResultado[]): ResumenResultado {
     sesiones,
     costoPorSesion: sesiones && costos ? costos / sesiones : null,
     ingresoPorSesion,
-    mesesConCostos: conCostos.length,
+    mesesConCostos: comparables.length,
+    mesesSinCostos: serie.filter(m => !mesConCostos(m) && (m.ingresos > 0 || m.sesiones > 0)).map(m => m.mes),
     costoMensualProm,
-    sesionesMesProm: conSesiones.length ? conSesiones.reduce((s, m) => s + m.sesiones, 0) / conSesiones.length : null,
+    sesionesMesProm: comparables.length ? sesiones / comparables.length : null,
     equilibrioSesionesMes: costoMensualProm !== null && ingresoPorSesion ? costoMensualProm / ingresoPorSesion : null,
   };
 }
@@ -106,7 +112,9 @@ export interface FilaResultadoArea {
   margen: number | null;
 }
 
-// Resultado por área: costos directos (del área o de sus terapeutas) más los comunes repartidos por lo facturado.
+// Resultado por área (solo meses con costos, igual que el resumen): costos directos (del área o de
+// sus terapeutas; un terapeuta sin área cae en SIN_AREA) más los comunes repartidos según lo
+// facturado en esos meses, sea cual sea la base de ingresos elegida.
 export function resultadoPorArea(
   fs: FacturaAnalizada[],
   cs: CostoAnalizado[],
@@ -114,27 +122,32 @@ export function resultadoPorArea(
   base: BaseIngresos,
   areaPorTerapeuta: AreaPorTerapeuta,
 ): FilaResultadoArea[] {
-  const meses = new Set(serie.map(m => m.mes));
+  const comparables = serie.filter(mesConCostos);
+  const meses = new Set(comparables.map(m => m.mes));
   const ingresos = new Map<string, number>();
+  const facturado = new Map<string, number>();
   for (const f of fs) {
-    const d = diaIngreso(f, base);
-    if (d === null || !meses.has(mesDe(d))) continue;
     const a = areaDe(areaPorTerapeuta, f.terapeutaId);
-    ingresos.set(a, (ingresos.get(a) ?? 0) + f.monto);
+    const d = diaIngreso(f, base);
+    if (d !== null && meses.has(mesDe(d))) ingresos.set(a, (ingresos.get(a) ?? 0) + f.monto);
+    if (meses.has(mesDe(f.emision))) facturado.set(a, (facturado.get(a) ?? 0) + f.monto);
   }
   const directos = new Map<string, number>();
   let comunes = 0;
-  for (const c of costosEnRango(cs, serie)) {
+  for (const c of costosEnRango(cs, comparables)) {
     const a = c.areaId ?? (c.terapeutaId ? areaDe(areaPorTerapeuta, c.terapeutaId) : null);
     if (a === null) comunes += c.monto;
     else directos.set(a, (directos.get(a) ?? 0) + c.monto);
   }
-  const totalIngresos = [...ingresos.values()].reduce((s, x) => s + x, 0);
-  const ids = new Set([...ingresos.keys(), ...directos.keys()]);
+  // Sin nada facturado no hay con qué repartir: los comunes quedan en "Sin área" para que el total cierre.
+  const totalFacturado = [...facturado.values()].reduce((s, x) => s + x, 0);
+  if (!totalFacturado && comunes) facturado.set(SIN_AREA, 1);
+  const pesoTotal = totalFacturado || (comunes ? 1 : 0);
+  const ids = new Set([...ingresos.keys(), ...directos.keys(), ...(comunes ? facturado.keys() : [])]);
   return [...ids].map(id => {
     const ing = ingresos.get(id) ?? 0;
     const dir = directos.get(id) ?? 0;
-    const com = totalIngresos ? comunes * (ing / totalIngresos) : 0;
+    const com = pesoTotal ? comunes * ((facturado.get(id) ?? 0) / pesoTotal) : 0;
     const res = ing - dir - com;
     return { id, ingresos: ing, directos: dir, comunes: com, resultado: res, margen: ing ? res / ing : null };
   }).sort((a, b) => (a.id === SIN_AREA ? 1 : b.id === SIN_AREA ? -1 : b.ingresos - a.ingresos));

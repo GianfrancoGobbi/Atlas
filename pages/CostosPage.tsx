@@ -30,11 +30,31 @@ const VACIO = (mes: string): NuevoCosto => ({
   mes, categoria: 'alquiler', descripcion: '', monto: '', area_id: null, terapeuta_id: null, recurrente: true,
 });
 
+// Monto escrito a mano: acepta "1.500.000,50" (es-AR), "1500000,5" y "1500000.5".
+// Sin coma, los puntos son de miles si separan grupos de exactamente 3 dígitos ("150.000"); si no, son decimales.
+const leerMonto = (texto: string): number => {
+  const t = texto.trim().replace(/\s|\$/g, '');
+  if (t.includes(',')) {
+    // Con coma decimal, los puntos solo valen como separador de miles bien formado ("1.250.000,50").
+    if (!/^(\d{1,3}(\.\d{3})+|\d+)(,\d+)?$/.test(t)) return NaN;
+    return Number(t.replace(/\./g, '').replace(',', '.'));
+  }
+  if (/^\d{1,3}(\.\d{3})+$/.test(t)) return Number(t.replace(/\./g, ''));
+  // Number() aceptaría "1e5", "0x10" o "Infinity": solo dígitos con un punto decimal opcional.
+  return /^\d+(\.\d+)?$/.test(t) ? Number(t) : NaN;
+};
+// Monto guardado (numeric "350000.00") al formato del campo, sin puntos que se lean como miles.
+const montoParaEditar = (monto: number | string) => String(Number(monto)).replace('.', ',');
+
+// Clave que identifica un costo recurrente entre meses (la misma que usa costosService.copiarRecurrentes).
+const claveRecurrente = (c: CostoRaw) => [c.categoria, c.descripcion.trim().toLowerCase(), c.area_id ?? '', c.terapeuta_id ?? ''].join('|');
+
 const claseCampo = 'block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm text-brand-gray focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary';
 
 // Carga y gestión de los costos de la clínica (solo administración).
 export const CostosPage: React.FC = () => {
-  const { role } = useAuth();
+  const { role, isLoading: cargandoAuth } = useAuth();
+  const esAdmin = role === UserRole.ADMIN;
   const [mes, setMes] = useState(mesActual());
   const [costos, setCostos] = useState<CostoRaw[]>([]);
   const [areas, setAreas] = useState<{ id: string; nombre: string }[]>([]);
@@ -42,26 +62,28 @@ export const CostosPage: React.FC = () => {
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [form, setForm] = useState<NuevoCosto | null>(null);
   const [editandoId, setEditandoId] = useState<string | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
-    setError(null);
+    setErrorCarga(null);
     try {
       const [c, a, t] = await Promise.all([costosService.listar(), areaService.getAreas(), profileService.getAllTerapeutas()]);
       setCostos(c);
       setAreas(a.map(x => ({ id: x.id, nombre: x.nombre })));
       setTerapeutas(t.map(x => ({ id: x.id, nombre: `${x.nombre} ${x.apellido}`.trim() })));
     } catch (e: any) {
-      setError(e.message || 'No se pudieron cargar los costos.');
+      setErrorCarga(e?.message || 'No se pudieron cargar los costos.');
     } finally {
       setCargando(false);
     }
   }, []);
 
-  useEffect(() => { cargar(); }, [cargar]);
+  // Un no-admin no consulta nada (además del RLS de la tabla).
+  useEffect(() => { if (esAdmin) cargar(); }, [cargar, esAdmin]);
 
   const delMes = useMemo(() => costos.filter(c => c.mes === mes), [costos, mes]);
   const delAnterior = useMemo(() => costos.filter(c => c.mes === moverMes(mes, -1)), [costos, mes]);
@@ -70,6 +92,11 @@ export const CostosPage: React.FC = () => {
   const totalAnterior = total(delAnterior);
   const comunes = total(delMes.filter(c => !c.area_id && !c.terapeuta_id));
   const recurrentesAnterior = delAnterior.filter(c => c.recurrente).length;
+  // Recurrentes del mes anterior que todavía no están en este mes (lo que copiaría el botón).
+  const recurrentesPendientes = useMemo(() => {
+    const ya = new Set(delMes.map(claveRecurrente));
+    return delAnterior.filter(c => c.recurrente && !ya.has(claveRecurrente(c))).length;
+  }, [delMes, delAnterior]);
 
   const porCategoria = useMemo(() => CATEGORIAS_COSTO
     .map(c => ({ ...c, monto: total(delMes.filter(x => x.categoria === c.id)) }))
@@ -82,12 +109,13 @@ export const CostosPage: React.FC = () => {
 
   const guardar = async () => {
     if (!form) return;
-    const monto = Number(String(form.monto).replace(/\./g, '').replace(',', '.'));
+    const monto = leerMonto(String(form.monto));
     if (!Number.isFinite(monto) || monto <= 0) { setError('Ingresá un monto mayor a cero.'); return; }
     if (!form.descripcion.trim()) { setError('Agregá una descripción.'); return; }
     setGuardando(true);
     setError(null);
     try {
+      // En una edición el mes no cambia: form.mes es el que ya tenía el costo.
       const datos = { ...form, descripcion: form.descripcion.trim(), monto };
       if (editandoId) {
         const act = await costosService.actualizar(editandoId, datos);
@@ -109,12 +137,18 @@ export const CostosPage: React.FC = () => {
 
   const borrar = async (c: CostoRaw) => {
     if (!window.confirm(`¿Borrar "${c.descripcion}" (${fmt.moneda(Number(c.monto))})?`)) return;
+    setGuardando(true);
+    setError(null);
     try {
       await costosService.borrar(c.id);
       setCostos(cs => cs.filter(x => x.id !== c.id));
+      // Si se estaba editando ese costo, el formulario apuntaría a una fila que ya no existe.
+      if (editandoId === c.id) { setForm(null); setEditandoId(null); }
       setAviso('Costo borrado.');
     } catch (e: any) {
       setError(e.message || 'No se pudo borrar el costo.');
+    } finally {
+      setGuardando(false);
     }
   };
 
@@ -132,7 +166,8 @@ export const CostosPage: React.FC = () => {
     }
   };
 
-  if (role !== UserRole.ADMIN) return <Alert type="error" message="Solo administración puede ver y cargar los costos." />;
+  if (cargandoAuth) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>;
+  if (!esAdmin) return <Alert type="error" message="Solo administración puede ver y cargar los costos." />;
 
   const columnas: ColumnaTabla<CostoRaw>[] = [
     { clave: 'categoria', titulo: 'Categoría', valor: c => etiquetaCategoria(c.categoria) },
@@ -146,9 +181,9 @@ export const CostosPage: React.FC = () => {
         <span className="flex justify-end gap-3">
           <button type="button" className="text-sm font-medium text-primary-dark hover:underline" onClick={() => {
             setEditandoId(c.id);
-            setForm({ mes: c.mes, categoria: c.categoria, descripcion: c.descripcion, monto: String(c.monto), area_id: c.area_id, terapeuta_id: c.terapeuta_id, recurrente: c.recurrente });
+            setForm({ mes: c.mes, categoria: c.categoria, descripcion: c.descripcion, monto: montoParaEditar(c.monto), area_id: c.area_id, terapeuta_id: c.terapeuta_id, recurrente: c.recurrente });
           }}>Editar</button>
-          <button type="button" className="text-sm text-slate-500 hover:text-red-600 hover:underline" onClick={() => borrar(c)}>Borrar</button>
+          <button type="button" disabled={guardando} className="text-sm text-slate-500 hover:text-red-600 hover:underline disabled:opacity-50" onClick={() => borrar(c)}>Borrar</button>
         </span>
       ),
     },
@@ -166,15 +201,16 @@ export const CostosPage: React.FC = () => {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {recurrentesAnterior > 0 && (
+          {!cargando && !errorCarga && recurrentesPendientes > 0 && (
             <Button variant="outline" size="sm" onClick={copiarRecurrentes} isLoading={guardando}>
-              Copiar recurrentes de {nombreMes(moverMes(mes, -1))}
+              Copiar {recurrentesPendientes} recurrentes de {nombreMes(moverMes(mes, -1))}
             </Button>
           )}
-          <Button size="sm" onClick={() => { setEditandoId(null); setForm(VACIO(mes)); }}>Nuevo costo</Button>
+          <Button size="sm" disabled={cargando || !!errorCarga} onClick={() => { setEditandoId(null); setForm(VACIO(mes)); }}>Nuevo costo</Button>
         </div>
       </div>
 
+      {errorCarga && <Alert type="error" message={errorCarga} />}
       {error && <Alert type="error" message={error} onClose={() => setError(null)} />}
       {aviso && <Alert type="success" message={aviso} onClose={() => setAviso(null)} />}
 
@@ -203,6 +239,9 @@ export const CostosPage: React.FC = () => {
                 }}
               >
                 <option value="">Común (se reparte)</option>
+                {/* Un área o terapeuta que ya no está en las listas (p. ej. terapeuta inactivo) se muestra igual para no perder la asignación. */}
+                {form.terapeuta_id && !terapeutas.some(t => t.id === form.terapeuta_id) && <option value={`t:${form.terapeuta_id}`}>Terapeuta (inactivo)</option>}
+                {!form.terapeuta_id && form.area_id && !areas.some(a => a.id === form.area_id) && <option value={`a:${form.area_id}`}>Área (no disponible)</option>}
                 <optgroup label="Área">{areas.map(a => <option key={a.id} value={`a:${a.id}`}>{a.nombre}</option>)}</optgroup>
                 <optgroup label="Terapeuta">{terapeutas.map(t => <option key={t.id} value={`t:${t.id}`}>{t.nombre}</option>)}</optgroup>
               </select>
@@ -221,6 +260,8 @@ export const CostosPage: React.FC = () => {
 
       {cargando ? (
         <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+      ) : errorCarga ? (
+        <div className="flex justify-center py-8"><Button size="sm" variant="outline" onClick={cargar}>Reintentar</Button></div>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
