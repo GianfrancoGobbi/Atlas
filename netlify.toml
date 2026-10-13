@@ -1,0 +1,12 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+# Las variables de entorno NO van acá: se cargan en la UI de Netlify
+# (Site configuration → Environment variables). Ver .env.example.
+
+[dev]
+  command = "npm run dev"
+  targetPort = 5173
+  framework = "#custom"

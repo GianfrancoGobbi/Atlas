@@ -2,10 +2,12 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '../components/shared/Button';
+import { Logo } from '../components/shared/Logo';
 
 export const NotFoundPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col justify-center items-center text-center py-12 px-4 sm:px-6 lg:px-8">
+      <Logo className="h-20 w-auto mb-6" />
       <h1 className="text-6xl font-extrabold text-primary tracking-tight sm:text-7xl">
         404
       </h1>

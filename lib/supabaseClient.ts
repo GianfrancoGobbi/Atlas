@@ -1,20 +1,18 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-// Types are still useful for Supabase interactions, even if credentials are hardcoded.
-// import { UserProfile, UserRole, SupabaseAuthUser, SupabaseAuthResponse, SupabaseQueryResponse, SupabaseSingleResponse } from '../types';
 
-// Hardcoded Supabase credentials
-const supabaseUrl = "https://qqmktunqunvvnohknnyi.supabase.co";
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFxbWt0dW5xdW52dm5vaGtubnlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkyNjk2NjIsImV4cCI6MjA2NDg0NTY2Mn0._iPUHDpppNC_YRHZAP1j-tpWidGnjLqfnw3euwpxIhU";
+// Credenciales públicas del frontend. Se definen en .env.local (local) y en las
+// variables de entorno de Netlify (producción). Ver .env.example.
+// Nunca usar acá la secret key: todo lo que empieza con VITE_ queda en el bundle.
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  // This check is technically redundant now with hardcoding, but good for belt-and-suspenders
-  // or if someone accidentally removes the hardcoded values.
-  throw new Error("Supabase URL and Anon Key are required.");
+if (!supabaseUrl || !supabasePublishableKey) {
+  throw new Error("Faltan VITE_SUPABASE_URL y/o VITE_SUPABASE_PUBLISHABLE_KEY. Ver .env.example.");
 }
 
 // Create and export the Supabase client
-export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase: SupabaseClient = createClient(supabaseUrl, supabasePublishableKey);
 
 // Note: The original mock data and listener logic have been removed.
 // The actual Supabase client handles its own state and event listeners.

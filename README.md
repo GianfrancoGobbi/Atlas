@@ -1,14 +1,30 @@
-# Run and deploy your AI Studio app
+# Atlas - Consultorio Terapéutico
 
-This contains everything you need to run your app locally.
+App web (React + Vite + Supabase) para gestionar turnos, perfiles, facturación y tareas de un consultorio terapéutico. Roles: paciente, terapeuta y admin. Se publica en Netlify.
 
-## Run Locally
+## Correr en local
 
-**Prerequisites:**  Node.js
+**Requisitos:** Node.js 20+
 
+1. Instalar dependencias: `npm install`
+2. Copiar `.env.example` como `.env.local` y completar los valores.
+3. Levantar la app:
+   - `npm run dev`: toda la app, salvo el botón "Mejorar Notas con IA".
+   - `npx netlify dev`: la app más la Netlify Function de IA (`/api/enhance-notes`).
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Variables de entorno
+
+| Variable | Dónde se usa | ¿Secreta? |
+|---|---|---|
+| `VITE_SUPABASE_URL` | Frontend y función | No |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Frontend y función | No (es pública por diseño) |
+| `GEMINI_API_KEY` | Solo la Netlify Function | **Sí** |
+| `GEMINI_MODEL` | Solo la Netlify Function (opcional) | No |
+
+Todo lo que empieza con `VITE_` queda dentro del bundle del navegador: ahí nunca va un secreto. La secret key de Supabase (`sb_secret_...`) no la usa esta app.
+
+En Netlify se cargan en **Site configuration → Environment variables**. Después de cambiarlas hay que redeployar.
+
+## Seguridad de datos
+
+La protección real de los datos está en Supabase (grants y RLS), no en el frontend. El rol `anon` (visitante sin login) solo puede leer `areas`, que usa la landing pública.

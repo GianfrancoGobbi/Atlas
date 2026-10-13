@@ -9,6 +9,7 @@ import { Area } from '../types';
 import { areaService } from '../services/areaService';
 import { Spinner } from '../components/shared/Spinner';
 import { Alert } from '../components/shared/Alert';
+import { ABOUT_IMAGE, AreaKey, HERO_IMAGE, SiteImage, getAreaImage, getAreaKey } from '../utils/areaImages';
 
 // --- Icon Definitions ---
 const FonoaudiologiaIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
@@ -32,12 +33,17 @@ const DefaultAreaIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     </svg>
 );
 
-const areaIconMap: Record<string, React.ReactNode> = {
-  "Fonoaudiología": <FonoaudiologiaIcon />,
-  "Psicología": <PsicologiaIcon />,
-  "Pedagogía Terapéutica": <PedagogiaTerapeuticaIcon />,
-  "Psicopedagogía": <PsicopedagogiaIcon />,
-  "Integración Escolar": <IntegracionEscolarIcon />,
+const areaIconMap: Partial<Record<AreaKey, React.ReactNode>> = {
+  fonoaudiologia: <FonoaudiologiaIcon />,
+  psicologia: <PsicologiaIcon />,
+  pedagogiaTerapeutica: <PedagogiaTerapeuticaIcon />,
+  psicopedagogia: <PsicopedagogiaIcon />,
+  integracionEscolar: <IntegracionEscolarIcon />,
+};
+
+const getAreaIcon = (nombre: string): React.ReactNode => {
+  const key = getAreaKey(nombre);
+  return (key && areaIconMap[key]) || <DefaultAreaIcon />;
 };
 // --- End Icon Definitions ---
 
@@ -51,16 +57,27 @@ interface AreaCardProps {
   icon?: React.ReactNode;
   title: string;
   description: string;
+  image: SiteImage;
 }
 
-const AreaCard: React.FC<AreaCardProps> = ({ icon, title, description }) => (
-  <div className="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col h-full">
-    {icon && <div className="text-primary mb-4 flex justify-center">{icon}</div>}
-    <h3 className="text-xl font-semibold text-primary-dark mb-2 text-center">{title}</h3> {/* text-slate-800 to text-primary-dark */}
-    <p className="text-brand-gray text-sm text-center flex-grow">{description ? (description.length > 150 ? description.substring(0, 147) + '...' : description) : 'Descripción detallada próximamente.'}</p> {/* text-slate-600 to text-brand-gray */}
-    <span className="mt-4 text-sm font-medium text-primary group-hover:underline text-center">
-      Ver más detalles
-    </span>
+const AreaCard: React.FC<AreaCardProps> = ({ icon, title, description, image }) => (
+  <div className="bg-white rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col h-full overflow-hidden">
+    <div className="h-48 overflow-hidden">
+      <img
+        src={image.src}
+        alt={image.alt}
+        loading="lazy"
+        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+      />
+    </div>
+    <div className="px-6 pb-6 flex flex-col flex-grow">
+      {icon && <div className="relative -mt-10 mb-3 mx-auto bg-white rounded-full p-3 shadow-md text-primary">{icon}</div>}
+      <h3 className="text-xl font-semibold text-primary-dark mb-2 text-center">{title}</h3> {/* text-slate-800 to text-primary-dark */}
+      <p className="text-brand-gray text-sm text-center flex-grow">{description ? (description.length > 150 ? description.substring(0, 147) + '...' : description) : 'Descripción detallada próximamente.'}</p> {/* text-slate-600 to text-brand-gray */}
+      <span className="mt-4 text-sm font-medium text-primary group-hover:underline text-center">
+        Ver más detalles
+      </span>
+    </div>
   </div>
 );
 
@@ -91,34 +108,47 @@ export const LandingPage: React.FC = () => {
       <Navbar />
 
       {/* Hero Section */}
-      <header className="bg-gradient-to-r from-primary-light via-primary to-primary-dark text-white py-20 md:py-32">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <Logo className="h-24 w-auto mx-auto mb-6 animate-pulse-logo" title={`${APP_NAME} - Centro Terapéutico`} />
-          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">
-            Bienvenidos a {APP_NAME}
-          </h1>
-          <p className="mt-4 text-lg md:text-xl max-w-2xl mx-auto">
-            Tu centro de terapias en Mendoza. Ofrecemos un espacio de contención y profesionalismo para acompañarte en tu desarrollo y bienestar.
-          </p>
-          <div className="mt-10">
-            <Link to="/login">
-              <Button size="lg" variant="secondary" className="bg-white text-primary hover:bg-slate-100"> {/* Consider changing variant if secondary button style is updated*/}
-                Acceder a Mi Cuenta
-              </Button>
-            </Link>
+      <header className="bg-gradient-to-r from-primary-light via-primary to-primary-dark text-white py-16 md:py-24">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+          <div className="text-center md:text-left">
+            <Logo className="h-24 w-auto mx-auto md:mx-0 mb-6 animate-pulse-logo" title={`${APP_NAME} - Centro Terapéutico`} />
+            <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">
+              Bienvenidos a {APP_NAME}
+            </h1>
+            <p className="mt-4 text-lg md:text-xl max-w-2xl mx-auto md:mx-0">
+              Tu centro de terapias en Mendoza. Ofrecemos un espacio de contención y profesionalismo para acompañarte en tu desarrollo y bienestar.
+            </p>
+            <div className="mt-10">
+              <Link to="/login">
+                <Button size="lg" variant="secondary" className="bg-white text-primary hover:bg-slate-100"> {/* Consider changing variant if secondary button style is updated*/}
+                  Acceder a Mi Cuenta
+                </Button>
+              </Link>
+            </div>
           </div>
+          <img
+            src={HERO_IMAGE.src}
+            alt={HERO_IMAGE.alt}
+            className="w-full h-64 sm:h-80 md:h-[26rem] object-cover rounded-2xl shadow-2xl ring-4 ring-white/40"
+          />
         </div>
       </header>
 
       <main className="flex-grow">
         {/* About Us Section */}
         <section id="about" className="py-16 md:py-24 bg-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+            <img
+              src={ABOUT_IMAGE.src}
+              alt={ABOUT_IMAGE.alt}
+              loading="lazy"
+              className="w-full h-64 md:h-80 object-cover rounded-2xl shadow-lg"
+            />
+            <div className="text-center md:text-left">
               <h2 className="text-3xl font-bold text-primary-dark tracking-tight sm:text-4xl"> {/* text-slate-800 to text-primary-dark */}
                 Sobre Nosotros
               </h2>
-              <p className="mt-4 text-lg text-brand-gray max-w-3xl mx-auto"> {/* text-slate-600 to text-brand-gray */}
+              <p className="mt-4 text-lg text-brand-gray"> {/* text-slate-600 to text-brand-gray */}
                 En {APP_NAME}, creemos en un abordaje integral y personalizado para cada individuo. Nuestro equipo de profesionales está comprometido con brindar la más alta calidad de atención en un ambiente cálido y seguro, fomentando el bienestar y el desarrollo pleno de quienes nos eligen.
               </p>
             </div>
@@ -152,7 +182,8 @@ export const LandingPage: React.FC = () => {
                     <AreaCard
                       title={area.nombre}
                       description={area.descripcion || 'Descripción no disponible.'}
-                      icon={areaIconMap[area.nombre] || <DefaultAreaIcon />}
+                      icon={getAreaIcon(area.nombre)}
+                      image={getAreaImage(area.nombre)}
                     />
                   </Link>
                 ))}

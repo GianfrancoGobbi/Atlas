@@ -181,10 +181,6 @@ export const AppointmentDetailPage: React.FC = () => {
   };
 
   const handleEnhanceWithAi = async () => {
-    if (!geminiService.isAvailable()) {
-      setAiError("El servicio de IA no está disponible. Verifique la configuración de la clave API.");
-      return;
-    }
     if (currentUserRole !== UserRole.TERAPEUTA || !annotations.trim()) return;
 
     setIsAiProcessing(true);
@@ -375,21 +371,19 @@ export const AppointmentDetailPage: React.FC = () => {
           />
           
           {aiError && <Alert type="error" message={aiError} onClose={() => setAiError(null)} />}
-          {geminiService.isAvailable() && (
-            <Button 
-                onClick={handleEnhanceWithAi} 
-                variant="outline" 
-                size="sm" 
-                isLoading={isAiProcessing}
-                disabled={!annotations.trim()}
-                className="flex items-center"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-primary" viewBox="0 0 20 20" fill="currentColor"> {/* Icon color to primary */}
-                    <path fillRule="evenodd" d="M17.293 5.293a1 1 0 011.414 1.414l-8.5 8.5a1 1 0 01-1.414 0l-4.5-4.5a1 1 0 011.414-1.414L10 12.586l7.293-7.293zM10 2a1 1 0 00-1 1v1.586l-1.707-1.707a1 1 0 00-1.414 1.414L7.586 6H6a1 1 0 000 2h1.586l-1.707 1.707a1 1 0 001.414 1.414L9 9.414V11a1 1 0 002 0V9.414l1.707 1.707a1 1 0 001.414-1.414L12.414 8H14a1 1 0 000-2h-1.586l1.707-1.707a1 1 0 00-1.414-1.414L11 4.586V3a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-                {isAiProcessing ? 'Procesando con IA...' : 'Mejorar Notas con IA'}
-            </Button>
-          )}
+          <Button
+              onClick={handleEnhanceWithAi}
+              variant="outline"
+              size="sm"
+              isLoading={isAiProcessing}
+              disabled={!annotations.trim()}
+              className="flex items-center"
+          >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-primary" viewBox="0 0 20 20" fill="currentColor"> {/* Icon color to primary */}
+                  <path fillRule="evenodd" d="M17.293 5.293a1 1 0 011.414 1.414l-8.5 8.5a1 1 0 01-1.414 0l-4.5-4.5a1 1 0 011.414-1.414L10 12.586l7.293-7.293zM10 2a1 1 0 00-1 1v1.586l-1.707-1.707a1 1 0 00-1.414 1.414L7.586 6H6a1 1 0 000 2h1.586l-1.707 1.707a1 1 0 001.414 1.414L9 9.414V11a1 1 0 002 0V9.414l1.707 1.707a1 1 0 001.414-1.414L12.414 8H14a1 1 0 000-2h-1.586l1.707-1.707a1 1 0 00-1.414-1.414L11 4.586V3a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              {isAiProcessing ? 'Procesando con IA...' : 'Mejorar Notas con IA'}
+          </Button>
 
           <div className="flex justify-between items-center pt-4">
             <Button 

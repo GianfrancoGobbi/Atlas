@@ -8,13 +8,7 @@ import { Spinner } from '../components/shared/Spinner';
 import { Alert } from '../components/shared/Alert';
 import { Button } from '../components/shared/Button';
 import { WhatsAppContext } from '../contexts/WhatsAppContext'; // Import WhatsAppContext
-
-// Placeholder icon for the detail page, can be customized
-const DetailAreaIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-primary mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" {...props}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-  </svg>
-);
+import { getAreaImage } from '../utils/areaImages';
 
 const UserIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" {...props}>
@@ -130,62 +124,70 @@ export const AreaDetailPage: React.FC = () => {
     return <Alert type="info" message="No se encontraron detalles para esta área." />;
   }
 
+  const areaImage = getAreaImage(area.nombre);
+
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="bg-white shadow-xl rounded-lg p-6 md:p-8">
-        <div className="flex flex-col items-center text-center">
-          <DetailAreaIcon />
-          <h1 className="text-3xl md:text-4xl font-bold text-primary mb-3">{area.nombre}</h1>
-        </div>
+      <div className="bg-white shadow-xl rounded-lg overflow-hidden">
+        <img
+          src={areaImage.src}
+          alt={areaImage.alt}
+          className="h-56 md:h-72 w-full object-cover"
+        />
+        <div className="p-6 md:p-8">
+          <div className="flex flex-col items-center text-center">
+            <h1 className="text-3xl md:text-4xl font-bold text-primary mb-3">{area.nombre}</h1>
+          </div>
         
-        <div className="mt-6 prose prose-slate max-w-none text-brand-gray text-justify"> {/* text-slate-700 to text-brand-gray */}
-          <p>{area.descripcion || 'No hay una descripción detallada disponible para esta área.'}</p>
-        </div>
+          <div className="mt-6 prose prose-slate max-w-none text-brand-gray text-justify"> {/* text-slate-700 to text-brand-gray */}
+            <p>{area.descripcion || 'No hay una descripción detallada disponible para esta área.'}</p>
+          </div>
 
-        <div className="mt-8 pt-6 border-t border-slate-200">
-          <h2 className="text-2xl font-semibold text-primary-dark mb-4">Terapeutas en esta Área</h2> {/* text-slate-700 to text-primary-dark */}
-          {therapists.length > 0 ? (
-            <ul className="space-y-4">
-              {therapists.map(therapist => {
-                const isReferente = area.referenteId === therapist.id;
-                // const referenteActual = isReferente ? referenteProfile : null; // Not used for direct display of phone
+          <div className="mt-8 pt-6 border-t border-slate-200">
+            <h2 className="text-2xl font-semibold text-primary-dark mb-4">Terapeutas en esta Área</h2> {/* text-slate-700 to text-primary-dark */}
+            {therapists.length > 0 ? (
+              <ul className="space-y-4">
+                {therapists.map(therapist => {
+                  const isReferente = area.referenteId === therapist.id;
+                  // const referenteActual = isReferente ? referenteProfile : null; // Not used for direct display of phone
 
-                return (
-                  <li key={therapist.id} className="p-4 bg-slate-50 rounded-lg shadow-sm border border-slate-200">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-                      <div className="flex items-center mb-2 sm:mb-0">
-                        <UserIcon className="h-6 w-6 mr-3 text-primary" /> {/* Icon color to primary */}
-                        <span className="text-lg font-medium text-brand-gray">{therapist.nombre} {therapist.apellido}</span> {/* text-slate-800 to text-brand-gray */}
+                  return (
+                    <li key={therapist.id} className="p-4 bg-slate-50 rounded-lg shadow-sm border border-slate-200">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                        <div className="flex items-center mb-2 sm:mb-0">
+                          <UserIcon className="h-6 w-6 mr-3 text-primary" /> {/* Icon color to primary */}
+                          <span className="text-lg font-medium text-brand-gray">{therapist.nombre} {therapist.apellido}</span> {/* text-slate-800 to text-brand-gray */}
+                        </div>
+                        {isReferente && (
+                          <span className="flex items-center text-sm font-semibold text-secondary-dark bg-secondary-light px-3 py-1 rounded-full"> {/* text-yellow-700 bg-yellow-100 to text-secondary-dark bg-secondary-light */}
+                            Referente Principal <StarIcon className="ml-1.5" />
+                          </span>
+                        )}
                       </div>
-                      {isReferente && (
-                        <span className="flex items-center text-sm font-semibold text-secondary-dark bg-secondary-light px-3 py-1 rounded-full"> {/* text-yellow-700 bg-yellow-100 to text-secondary-dark bg-secondary-light */}
-                          Referente Principal <StarIcon className="ml-1.5" />
-                        </span>
+                      {therapist.especialidad && (
+                          <p className="text-sm text-brand-gray mt-1 ml-9 sm:ml-9">{therapist.especialidad}</p> /* text-slate-600 to text-brand-gray */
                       )}
-                    </div>
-                    {therapist.especialidad && (
-                        <p className="text-sm text-brand-gray mt-1 ml-9 sm:ml-9">{therapist.especialidad}</p> /* text-slate-600 to text-brand-gray */
-                    )}
-                    {/* The referente's phone number display is removed from here */}
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="text-brand-gray">Actualmente no hay terapeutas asignados a esta área.</p> /* text-slate-600 to text-brand-gray */
-          )}
-           {!area.referenteId && therapists.length > 0 && (
-             <p className="text-sm text-brand-gray mt-3">Nota: No se ha asignado un referente principal específico para esta área.</p> /* text-slate-500 to text-brand-gray */
-           )}
-        </div>
+                      {/* The referente's phone number display is removed from here */}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="text-brand-gray">Actualmente no hay terapeutas asignados a esta área.</p> /* text-slate-600 to text-brand-gray */
+            )}
+             {!area.referenteId && therapists.length > 0 && (
+               <p className="text-sm text-brand-gray mt-3">Nota: No se ha asignado un referente principal específico para esta área.</p> /* text-slate-500 to text-brand-gray */
+             )}
+          </div>
 
-        <div className="mt-10 text-center">
-          <Link to="/">
-            <Button variant="outline">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
-                Volver a Inicio
-            </Button>
-          </Link>
+          <div className="mt-10 text-center">
+            <Link to="/">
+              <Button variant="outline">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+                  Volver a Inicio
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
     </div>

@@ -1,0 +1,22 @@
+# Dependencias y build
+node_modules/
+dist/
+
+# Variables de entorno: nunca se suben (solo el ejemplo)
+.env
+.env.*
+!.env.example
+
+# Netlify CLI
+.netlify/
+
+# Logs y sistema
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Editores
+.vscode/*
+!.vscode/extensions.json
+.idea/
