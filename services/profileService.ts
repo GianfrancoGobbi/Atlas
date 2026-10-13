@@ -27,7 +27,7 @@ const RAW_PROFILE_SELECT_COLUMNS = `
 // Reflects the column names as selected in RAW_PROFILE_SELECT_COLUMNS
 interface RawUserProfile {
   id: string;
-  rol: UserRole; // DB stores 'paciente', 'terapeuta', 'admin'
+  rol: UserRole | 'super_admin'; // DB stores 'paciente', 'terapeuta', 'admin', 'super_admin'
   nombre: string;
   apellido: string;
   telefono?: string | null;
@@ -50,7 +50,8 @@ function mapRawProfileToUserProfile(rawProfile: RawUserProfile | null): UserProf
     nombre: rawProfile.nombre,
     apellido: rawProfile.apellido,
     telefono: rawProfile.telefono ?? undefined,
-    role: rawProfile.rol, // Direct mapping as UserRole enum values match DB
+    // 'super_admin' existe solo en la DB; en la app tiene los mismos permisos que admin.
+    role: rawProfile.rol === 'super_admin' ? UserRole.ADMIN : rawProfile.rol,
     fechaNacimiento: rawProfile.fecha_nacimiento ?? undefined,
     areaId: rawProfile.area_id ?? undefined,
     especialidad: rawProfile.especialidad ?? undefined, // Handle if not a column

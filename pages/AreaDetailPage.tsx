@@ -2,8 +2,7 @@
 import React, { useEffect, useState, useContext } from 'react'; // Added useContext
 import { useParams, Link } from 'react-router-dom';
 import { areaService } from '../services/areaService';
-import { profileService } from '../services/profileService';
-import { Area, UserProfile } from '../types';
+import { Area, MiembroEquipoPublico } from '../types';
 import { Spinner } from '../components/shared/Spinner';
 import { Alert } from '../components/shared/Alert';
 import { Button } from '../components/shared/Button';
@@ -33,8 +32,7 @@ const StarIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 export const AreaDetailPage: React.FC = () => {
   const { areaId } = useParams<{ areaId: string }>();
   const [area, setArea] = useState<Area | null>(null);
-  const [therapists, setTherapists] = useState<UserProfile[]>([]);
-  const [referenteProfile, setReferenteProfile] = useState<UserProfile | null>(null); // State kept for logic, not display
+  const [therapists, setTherapists] = useState<MiembroEquipoPublico[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [therapistsError, setTherapistsError] = useState<string | null>(null);
@@ -67,7 +65,6 @@ export const AreaDetailPage: React.FC = () => {
       setIsLoading(true);
       setError(null);
       setTherapistsError(null);
-      setReferenteProfile(null);
       setAreaReferentePhone(null); // Clear while fetching
 
       try {
@@ -75,19 +72,14 @@ export const AreaDetailPage: React.FC = () => {
         if (fetchedArea) {
           setArea(fetchedArea);
 
-          // Si no se puede leer el equipo (p. ej., un visitante sin sesión no tiene acceso a usuarios_perfil),
-          // la ficha del área se muestra igual y sólo esta sección avisa del problema.
+          // Si no se puede leer el equipo, la ficha del área se muestra igual y sólo esta sección avisa del problema.
           try {
-            const fetchedTherapists = await profileService.getTherapistsByAreaId(areaId);
-            setTherapists(fetchedTherapists);
-
-            if (fetchedArea.referenteId) {
-              const profile = await profileService.getProfileByUserId(fetchedArea.referenteId);
-              setReferenteProfile(profile); // Keep for logic, not for direct display of phone here
-              setAreaReferentePhone(profile?.telefono || null); // Update context
-            } else {
-              setAreaReferentePhone(null); // No referente, so no phone
-            }
+            const [equipo, telefonoReferente] = await Promise.all([
+              areaService.getEquipoPublico(areaId),
+              fetchedArea.referenteId ? areaService.getTelefonoReferente(areaId) : Promise.resolve(null),
+            ]);
+            setTherapists(equipo);
+            setAreaReferentePhone(telefonoReferente);
           } catch {
             setTherapists([]);
             setTherapistsError('No pudimos cargar el equipo de esta área en este momento.');
@@ -159,7 +151,6 @@ export const AreaDetailPage: React.FC = () => {
               <ul className="space-y-4">
                 {therapists.map(therapist => {
                   const isReferente = area.referenteId === therapist.id;
-                  // const referenteActual = isReferente ? referenteProfile : null; // Not used for direct display of phone
 
                   return (
                     <li key={therapist.id} className="p-4 bg-slate-50 rounded-lg shadow-sm border border-slate-200">

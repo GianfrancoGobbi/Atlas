@@ -1,6 +1,6 @@
 
 import { supabase } from '../lib/supabaseClient';
-import { Area } from '../types';
+import { Area, MiembroEquipoPublico } from '../types';
 import type { PostgrestResponse, PostgrestSingleResponse } from '@supabase/supabase-js';
 
 interface RawArea {
@@ -55,5 +55,24 @@ export const areaService = {
       throw error;
     }
     return mapRawAreaToArea(rawData);
+  },
+
+  // Datos públicos de la página de un área (visitantes sin login). Salen de funciones
+  // de la DB que exponen solo esto, sin abrir usuarios_perfil al público.
+  getEquipoPublico: async (areaId: string): Promise<MiembroEquipoPublico[]> => {
+    const { data, error } = await supabase.rpc('equipo_publico_area', { p_area_id: areaId });
+    if (error) throw error;
+    return (data ?? []).map((m: { id: string; nombre: string; apellido: string; especialidad: string | null }) => ({
+      id: m.id,
+      nombre: m.nombre,
+      apellido: m.apellido,
+      especialidad: m.especialidad ?? undefined,
+    }));
+  },
+
+  getTelefonoReferente: async (areaId: string): Promise<string | null> => {
+    const { data, error } = await supabase.rpc('telefono_referente_area', { p_area_id: areaId });
+    if (error) throw error;
+    return data ?? null;
   },
 };

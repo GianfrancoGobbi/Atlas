@@ -10,6 +10,14 @@ dist/
 # Netlify CLI
 .netlify/
 
+# Supabase CLI (estado local)
+supabase/.temp/
+
+# Planillas con datos de pacientes: nunca se suben
+*.xlsx
+*.xls
+*.csv
+
 # Logs y sistema
 *.log
 npm-debug.log*

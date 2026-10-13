@@ -37,6 +37,14 @@ export interface Area {
   referenteId?: string; // Foreign key to usuarios_perfil.id for the main contact/therapist
 }
 
+// Lo que la página pública de un área muestra de cada terapeuta (sin datos personales).
+export interface MiembroEquipoPublico {
+  id: string;
+  nombre: string;
+  apellido: string;
+  especialidad?: string;
+}
+
 export interface Turno {
   id:string;
   pacienteId: string;
