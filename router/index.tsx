@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthPage } from '../pages/AuthPage';
 import { DashboardPage } from '../pages/DashboardPage';
@@ -16,7 +16,11 @@ import { ProtectedRoute } from './ProtectedRoute';
 import { MainLayout } from '../components/layout/MainLayout';
 import { PublicLayout } from '../components/layout/PublicLayout'; // Import PublicLayout
 import { UserRole } from '../types';
+import { Spinner } from '../components/shared/Spinner';
 // Import other pages as needed e.g. ServicesPage, PaymentsPage for specific roles
+
+// Los tableros se cargan aparte para no sumar su peso al resto de la app.
+const TablerosPage = lazy(() => import('../pages/TablerosPage').then(m => ({ default: m.TablerosPage })));
 
 export const AppRouter: React.FC = () => {
   return (
@@ -44,6 +48,14 @@ export const AppRouter: React.FC = () => {
                 <Route path="/tareas-equipo" element={<TareasTerapeutasPage />} />
                 <Route path="/obras-sociales" element={<ObrasSocialesPage />} />
                 <Route path="/facturacion" element={<FacturacionPage />} />
+                <Route
+                  path="/tableros"
+                  element={
+                    <Suspense fallback={<div className="flex items-center justify-center py-16"><Spinner size="lg" /></div>}>
+                      <TablerosPage />
+                    </Suspense>
+                  }
+                />
                 {/* 
                   Example of other role-specific routes:
                   <Route path="/servicios" element={<ServicesManagementPage />} />
