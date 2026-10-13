@@ -107,15 +107,28 @@ export const LandingPage: React.FC = () => {
     <div className="flex flex-col min-h-screen bg-slate-50">
       <Navbar />
 
-      {/* Hero Section */}
-      <header className="bg-gradient-to-r from-primary-light via-primary to-primary-dark text-white py-16 md:py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
-          <div className="text-center md:text-left">
-            <Logo className="h-24 w-auto mx-auto md:mx-0 mb-6 animate-pulse-logo" title={`${APP_NAME} - Centro Terapéutico`} />
-            <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">
+      {/* Hero Section: foto de fondo con filtro verde para que el texto tenga contraste */}
+      <header className="relative overflow-hidden text-white">
+        {/* Foto espejada para que el niño quede a la derecha y el texto sobre la zona más oscura */}
+        <img
+          src={HERO_IMAGE.src}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover object-[30%_center] md:object-[center_30%] -scale-x-100"
+        />
+        {/* Tinte con el verde de la marca */}
+        <div className="absolute inset-0 bg-primary-dark/60 mix-blend-multiply" />
+        {/* Verde oscuro detrás del texto (en celular cubre todo porque el texto va centrado) */}
+        <div className="absolute inset-0 bg-teal-950/60 md:bg-transparent md:bg-gradient-to-r md:from-teal-950/90 md:via-teal-900/60 md:to-transparent" />
+
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 md:py-36">
+          <div className="max-w-2xl mx-auto md:mx-0 text-center md:text-left">
+            <div className="inline-block bg-white/90 rounded-full p-4 mb-6 shadow-lg">
+              <Logo className="h-20 w-auto animate-pulse-logo" title={`${APP_NAME} - Centro Terapéutico`} />
+            </div>
+            <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight drop-shadow-lg">
               Bienvenidos a {APP_NAME}
             </h1>
-            <p className="mt-4 text-lg md:text-xl max-w-2xl mx-auto md:mx-0">
+            <p className="mt-4 text-lg md:text-xl drop-shadow">
               Tu centro de terapias en Mendoza. Ofrecemos un espacio de contención y profesionalismo para acompañarte en tu desarrollo y bienestar.
             </p>
             <div className="mt-10">
@@ -126,11 +139,6 @@ export const LandingPage: React.FC = () => {
               </Link>
             </div>
           </div>
-          <img
-            src={HERO_IMAGE.src}
-            alt={HERO_IMAGE.alt}
-            className="w-full h-64 sm:h-80 md:h-[26rem] object-cover rounded-2xl shadow-2xl ring-4 ring-white/40"
-          />
         </div>
       </header>
 

@@ -37,6 +37,7 @@ export const AreaDetailPage: React.FC = () => {
   const [referenteProfile, setReferenteProfile] = useState<UserProfile | null>(null); // State kept for logic, not display
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [therapistsError, setTherapistsError] = useState<string | null>(null);
 
   const whatsAppContext = useContext(WhatsAppContext);
   if (!whatsAppContext) {
@@ -65,6 +66,7 @@ export const AreaDetailPage: React.FC = () => {
     const fetchAreaDetailsAndTherapists = async () => {
       setIsLoading(true);
       setError(null);
+      setTherapistsError(null);
       setReferenteProfile(null);
       setAreaReferentePhone(null); // Clear while fetching
 
@@ -72,16 +74,24 @@ export const AreaDetailPage: React.FC = () => {
         const fetchedArea = await areaService.getAreaById(areaId);
         if (fetchedArea) {
           setArea(fetchedArea);
-          
-          const fetchedTherapists = await profileService.getTherapistsByAreaId(areaId);
-          setTherapists(fetchedTherapists);
 
-          if (fetchedArea.referenteId) {
-            const profile = await profileService.getProfileByUserId(fetchedArea.referenteId);
-            setReferenteProfile(profile); // Keep for logic, not for direct display of phone here
-            setAreaReferentePhone(profile?.telefono || null); // Update context
-          } else {
-            setAreaReferentePhone(null); // No referente, so no phone
+          // Si no se puede leer el equipo (p. ej., un visitante sin sesión no tiene acceso a usuarios_perfil),
+          // la ficha del área se muestra igual y sólo esta sección avisa del problema.
+          try {
+            const fetchedTherapists = await profileService.getTherapistsByAreaId(areaId);
+            setTherapists(fetchedTherapists);
+
+            if (fetchedArea.referenteId) {
+              const profile = await profileService.getProfileByUserId(fetchedArea.referenteId);
+              setReferenteProfile(profile); // Keep for logic, not for direct display of phone here
+              setAreaReferentePhone(profile?.telefono || null); // Update context
+            } else {
+              setAreaReferentePhone(null); // No referente, so no phone
+            }
+          } catch {
+            setTherapists([]);
+            setTherapistsError('No pudimos cargar el equipo de esta área en este momento.');
+            setAreaReferentePhone(null);
           }
 
         } else {
@@ -173,7 +183,7 @@ export const AreaDetailPage: React.FC = () => {
                 })}
               </ul>
             ) : (
-              <p className="text-brand-gray">Actualmente no hay terapeutas asignados a esta área.</p> /* text-slate-600 to text-brand-gray */
+              <p className="text-brand-gray">{therapistsError || 'Actualmente no hay terapeutas asignados a esta área.'}</p> /* text-slate-600 to text-brand-gray */
             )}
              {!area.referenteId && therapists.length > 0 && (
                <p className="text-sm text-brand-gray mt-3">Nota: No se ha asignado un referente principal específico para esta área.</p> /* text-slate-500 to text-brand-gray */
