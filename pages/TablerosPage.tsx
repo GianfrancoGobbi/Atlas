@@ -173,6 +173,8 @@ export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, er
   const rango = useMemo(() => rangoDeFiltros(filtros, hoy), [filtros, hoy]);
   const facturas = useMemo(() => (base ? filtrarFacturas(base.facturas, filtros, rango) : []), [base, filtros, rango]);
   const turnos = useMemo(() => (base ? filtrarTurnos(base.turnos, filtros, rango) : []), [base, filtros, rango]);
+  // Mismos filtros pero sin período: para contar los turnos próximos.
+  const turnosTodos = useMemo(() => (base ? filtrarTurnos(base.turnos, filtros, { desde: null, hasta: null }) : []), [base, filtros]);
 
   // Opciones de filtro: solo lo que aparece en los datos que esta persona puede ver.
   const opcionesObras = useMemo(() => {
@@ -270,6 +272,9 @@ export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, er
               seccion={vista}
               facturas={facturas}
               turnos={turnos}
+              turnosTodos={turnosTodos}
+              personas={datos?.terapeutas ?? []}
+              hoy={hoy}
               rango={rango}
               obrasSeleccionadas={filtros.obrasSociales}
               onAlternarObraSocial={alternar('obrasSociales')}

@@ -383,25 +383,78 @@ export function filtrarTurnos(ts: TurnoAnalizado[], f: Filtros, rango: Rango): T
 
 export const ESTADOS_TURNO = ['pendiente', 'confirmado', 'finalizado', 'cancelado'];
 
+// Un turno "sin cerrar" es uno cuya fecha ya pasó pero sigue pendiente o confirmado:
+// nadie registró si se hizo o se canceló. Su atraso son los días desde la fecha del turno.
+// (La tabla no guarda horario de llegada ni de creación, así que no se puede medir puntualidad.)
+const ESTADOS_ABIERTOS = new Set(['pendiente', 'confirmado']);
+
 export interface ResumenTurnos {
   total: number;
   porEstado: { estado: string; cantidad: number }[];
   pctCancelados: number | null;
   duracionProm: number | null;
   horasAgendadas: number;
+  pasados: number;
+  finalizados: number;
+  pctFinalizados: number | null; // de los turnos con fecha pasada
+  sinCerrar: number;
+  atrasoProm: number | null; // días promedio de los turnos sin cerrar
+  atrasoMax: number;
 }
 
-export function resumirTurnos(ts: TurnoAnalizado[]): ResumenTurnos {
+export function resumirTurnos(ts: TurnoAnalizado[], hoy: number): ResumenTurnos {
   const conteo = new Map<string, number>(ESTADOS_TURNO.map(e => [e, 0]));
   for (const t of ts) conteo.set(t.estado, (conteo.get(t.estado) ?? 0) + 1);
   const duraciones = ts.map(t => t.duracionMin).filter((d): d is number => d !== null);
+  const pasados = ts.filter(t => t.dia < hoy);
+  const atrasos = pasados.filter(t => ESTADOS_ABIERTOS.has(t.estado)).map(t => hoy - t.dia);
+  const finalizados = pasados.filter(t => t.estado === 'finalizado').length;
   return {
     total: ts.length,
     porEstado: [...conteo.entries()].map(([estado, cantidad]) => ({ estado, cantidad })),
     pctCancelados: ts.length ? (conteo.get('cancelado') ?? 0) / ts.length : null,
     duracionProm: promedio(duraciones),
     horasAgendadas: duraciones.reduce((a, b) => a + b, 0) / 60,
+    pasados: pasados.length,
+    finalizados,
+    pctFinalizados: pasados.length ? finalizados / pasados.length : null,
+    sinCerrar: atrasos.length,
+    atrasoProm: promedio(atrasos),
+    atrasoMax: atrasos.length ? Math.max(...atrasos) : 0,
   };
+}
+
+// Turnos agendados (no cancelados) desde hoy hasta dentro de `dias` días.
+export function proximosTurnos(ts: TurnoAnalizado[], hoy: number, dias = 30): number {
+  return ts.filter(t => t.dia >= hoy && t.dia < hoy + dias && t.estado !== 'cancelado').length;
+}
+
+export interface FilaTurnosTerapeuta extends ResumenTurnos {
+  id: string;
+  nombre: string;
+  proximos: number;
+}
+
+// `ts` son los turnos del período; `todos` sirve para contar los próximos (que caen fuera del período).
+export function turnosPorTerapeuta(
+  ts: TurnoAnalizado[],
+  todos: TurnoAnalizado[],
+  personas: PersonaRaw[],
+  hoy: number,
+): FilaTurnosTerapeuta[] {
+  const nombrePorId = new Map(personas.map(p => [p.id, `${p.nombre ?? ''} ${p.apellido ?? ''}`.trim() || 'Sin nombre']));
+  // También entran quienes solo tienen turnos próximos (fuera del período), para que la columna cuadre con el total.
+  const ids = new Set(
+    [...ts, ...todos.filter(t => t.dia >= hoy && t.dia < hoy + 30)].map(t => t.terapeutaId).filter((x): x is string => !!x),
+  );
+  return [...ids]
+    .map(id => ({
+      id,
+      nombre: nombrePorId.get(id) ?? 'Sin nombre',
+      proximos: proximosTurnos(todos.filter(t => t.terapeutaId === id), hoy),
+      ...resumirTurnos(ts.filter(t => t.terapeutaId === id), hoy),
+    }))
+    .sort((a, b) => b.total - a.total);
 }
 
 // Cantidad de turnos por día de la semana × hora. Las horas van del primer al último

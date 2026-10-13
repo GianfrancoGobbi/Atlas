@@ -2,18 +2,15 @@ import React, { useMemo } from 'react';
 import { ColumnasApiladas } from '../charts/ColumnasApiladas';
 import { BarrasHorizontales } from '../charts/BarrasHorizontales';
 import { MapaDeCalor } from '../charts/MapaDeCalor';
-import { TablaDatos } from '../charts/TablaDatos';
-import { FilaTooltip, Indicador, SinDatos, TarjetaGrafico } from '../charts/base';
+import { ColumnaTabla, TablaDatos } from '../charts/TablaDatos';
+import { FilaTooltip, IconoEstado, Indicador, SinDatos, TarjetaGrafico } from '../charts/base';
 import { fmt, tema } from '../charts/tema';
 import {
-  cobranzaPorMes, DIAS_SEMANA, FacturaAnalizada, grillaTurnos, Rango, resumenPorObraSocial, resumirTurnos, TurnoAnalizado,
+  cobranzaPorMes, DIAS_SEMANA, FacturaAnalizada, FilaTurnosTerapeuta, grillaTurnos, PersonaRaw, proximosTurnos, Rango,
+  resumenPorObraSocial, resumirTurnos, TurnoAnalizado, turnosPorTerapeuta,
 } from '../../utils/reportes';
 
 export type SeccionSesiones = 'sesiones' | 'turnos';
-
-const ETIQUETA_ESTADO_TURNO: Record<string, string> = {
-  pendiente: 'Pendientes', confirmado: 'Confirmados', finalizado: 'Finalizados', cancelado: 'Cancelados',
-};
 
 // Grilla que ocupa el alto restante de la vista (en pantallas grandes, sin scroll de página).
 const GRILLA = 'grid min-h-0 flex-1 gap-3 lg:grid-rows-[minmax(0,1fr)]';
@@ -21,7 +18,10 @@ const GRILLA = 'grid min-h-0 flex-1 gap-3 lg:grid-rows-[minmax(0,1fr)]';
 interface Props {
   seccion: SeccionSesiones;
   facturas: FacturaAnalizada[];
-  turnos: TurnoAnalizado[];
+  turnos: TurnoAnalizado[]; // del período
+  turnosTodos: TurnoAnalizado[]; // sin filtro de período (para los próximos)
+  personas: PersonaRaw[];
+  hoy: number;
   rango: Rango;
   obrasSeleccionadas: string[];
   onAlternarObraSocial: (id: string) => void;
@@ -30,14 +30,15 @@ interface Props {
 }
 
 export const VistaSesiones: React.FC<Props> = ({
-  seccion, facturas, turnos, rango, obrasSeleccionadas, onAlternarObraSocial, avisoFiltrosNoAplican, actualizando,
+  seccion, facturas, turnos, turnosTodos, personas, hoy, rango, obrasSeleccionadas, onAlternarObraSocial, avisoFiltrosNoAplican, actualizando,
 }) => {
   const meses = useMemo(() => cobranzaPorMes(facturas, rango), [facturas, rango]);
   const porObra = useMemo(
     () => resumenPorObraSocial(facturas).filter(o => o.sesiones > 0).sort((a, b) => b.sesiones - a.sesiones),
     [facturas],
   );
-  const resumenTurnos = useMemo(() => resumirTurnos(turnos), [turnos]);
+  const resumenTurnos = useMemo(() => resumirTurnos(turnos, hoy), [turnos, hoy]);
+  const porTerapeuta = useMemo(() => turnosPorTerapeuta(turnos, turnosTodos, personas, hoy), [turnos, turnosTodos, personas, hoy]);
   const grilla = useMemo(() => grillaTurnos(turnos), [turnos]);
 
   const totalSesiones = facturas.reduce((s, f) => s + f.sesiones, 0);
@@ -46,20 +47,46 @@ export const VistaSesiones: React.FC<Props> = ({
 
   // ---------- Turnos ----------
   if (seccion === 'turnos') {
+    const columnasTerapeuta: ColumnaTabla<FilaTurnosTerapeuta>[] = [
+      { clave: 'nombre', titulo: 'Terapeuta', valor: t => t.nombre },
+      { clave: 'total', titulo: 'Turnos', valor: t => t.total, mostrar: t => fmt.entero(t.total), numerica: true },
+      { clave: 'fin', titulo: 'Finalizados', valor: t => t.pctFinalizados, mostrar: t => fmt.pct(t.pctFinalizados), numerica: true },
+      { clave: 'canc', titulo: 'Cancelados', valor: t => t.pctCancelados, mostrar: t => fmt.pct(t.pctCancelados), numerica: true },
+      { clave: 'abiertos', titulo: 'Sin cerrar', valor: t => t.sinCerrar, mostrar: t => (t.sinCerrar ? fmt.entero(t.sinCerrar) : '—'), numerica: true },
+      { clave: 'atraso', titulo: 'Atraso prom.', valor: t => t.atrasoProm, mostrar: t => (t.atrasoProm === null ? '—' : `${fmt.entero(t.atrasoProm)} d`), numerica: true },
+      { clave: 'prox', titulo: 'Próx. 30 d', valor: t => t.proximos, mostrar: t => fmt.entero(t.proximos), numerica: true },
+    ];
     return (
       <div className="flex h-full flex-col gap-3">
-        <div className="grid shrink-0 grid-cols-3 gap-3">
-          <Indicador etiqueta="Turnos agendados" valor={fmt.entero(resumenTurnos.total)} detalle={`${fmt.decimal(resumenTurnos.horasAgendadas)} horas`} />
-          <Indicador etiqueta="Duración promedio" valor={resumenTurnos.duracionProm === null ? '—' : `${fmt.entero(resumenTurnos.duracionProm)} min`} />
+        <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <Indicador etiqueta="Turnos agendados" valor={fmt.entero(resumenTurnos.total)} detalle={`${fmt.decimal(resumenTurnos.horasAgendadas)} ${resumenTurnos.horasAgendadas === 1 ? 'hora' : 'horas'}`} />
           <Indicador
-            etiqueta="Turnos cancelados"
-            valor={fmt.pct(resumenTurnos.pctCancelados)}
-            detalle={avisoFiltrosNoAplican ? 'Los filtros de obra social y pago no aplican a turnos' : undefined}
+            etiqueta="Finalizados"
+            icono={<IconoEstado tipo="bien" />}
+            valor={fmt.pct(resumenTurnos.pctFinalizados)}
+            detalle={`${fmt.entero(resumenTurnos.finalizados)} de ${fmt.entero(resumenTurnos.pasados)} ya pasados`}
           />
+          <Indicador
+            etiqueta="Cancelados"
+            valor={fmt.pct(resumenTurnos.pctCancelados)}
+            detalle={avisoFiltrosNoAplican ? 'Obra social y pago no aplican a turnos' : 'Del total del período'}
+          />
+          <Indicador
+            etiqueta="Sin cerrar"
+            icono={<IconoEstado tipo="alerta" />}
+            valor={fmt.entero(resumenTurnos.sinCerrar)}
+            detalle="Fecha pasada sin registrar"
+          />
+          <Indicador
+            etiqueta="Atraso promedio"
+            valor={resumenTurnos.atrasoProm === null ? '—' : `${fmt.entero(resumenTurnos.atrasoProm)} días`}
+            detalle={resumenTurnos.sinCerrar ? `Máximo ${fmt.entero(resumenTurnos.atrasoMax)} días` : 'No hay turnos sin cerrar'}
+          />
+          <Indicador etiqueta="Próximos 30 días" valor={fmt.entero(proximosTurnos(turnosTodos, hoy))} detalle="Agendados desde hoy" />
         </div>
+
         <div className={`${GRILLA} lg:grid-cols-3`}>
           <TarjetaGrafico
-            className="lg:col-span-2"
             titulo="Turnos por día y horario"
             subtitulo="Cuándo se concentran los turnos agendados"
             actualizando={actualizando}
@@ -88,32 +115,20 @@ export const VistaSesiones: React.FC<Props> = ({
           </TarjetaGrafico>
 
           <TarjetaGrafico
-            titulo="Turnos por estado"
+            className="lg:col-span-2"
+            titulo="Turnos por terapeuta"
+            subtitulo="Sin cerrar: turnos con fecha pasada que siguen pendientes o confirmados"
             actualizando={actualizando}
-            cuerpoClassName="min-h-[10rem]"
-            tabla={
-              <TablaDatos
-                columnas={[
-                  { clave: 'estado', titulo: 'Estado', valor: e => ETIQUETA_ESTADO_TURNO[e.estado] ?? e.estado },
-                  { clave: 'cantidad', titulo: 'Turnos', valor: e => e.cantidad, numerica: true },
-                ]}
-                filas={resumenTurnos.porEstado}
-                claveFila={e => e.estado}
-              />
-            }
+            cuerpoClassName="min-h-[14rem]"
           >
-            {turnos.length ? (
-              <BarrasHorizontales
-                filas={resumenTurnos.porEstado.map(e => ({
-                  clave: e.estado,
-                  etiqueta: ETIQUETA_ESTADO_TURNO[e.estado] ?? e.estado,
-                  valor: e.cantidad,
-                  color: tema.serie,
-                  tooltip: <FilaTooltip etiqueta={ETIQUETA_ESTADO_TURNO[e.estado] ?? e.estado} valor={fmt.entero(e.cantidad)} fuerte />,
-                }))}
-                formatoValor={fmt.entero}
-              />
-            ) : <SinDatos texto="No hay turnos en este período." />}
+            <TablaDatos
+              llenar
+              columnas={columnasTerapeuta}
+              filas={porTerapeuta}
+              claveFila={t => t.id}
+              orden={{ clave: 'total', desc: true }}
+              vacio="No hay turnos en este período."
+            />
           </TarjetaGrafico>
         </div>
       </div>
