@@ -33,7 +33,16 @@ export interface PersonaRaw {
   id: string;
   nombre: string | null;
   apellido: string | null;
+  area_id?: string | null;
 }
+
+export interface AreaRaw {
+  id: string;
+  nombre: string;
+}
+
+// Clave del grupo de terapeutas sin área asignada.
+export const SIN_AREA = 'sin_area';
 
 // ---------- Fechas de calendario ----------
 // Se usa solo AAAA-MM-DD (y la hora tal como está guardada, que es hora local) y se
@@ -96,6 +105,7 @@ export interface Filtros {
   hasta: string;
   obrasSociales: string[];
   terapeutas: string[];
+  areas: string[]; // ids de área (o SIN_AREA), según el área del terapeuta
   estado: FiltroEstado;
 }
 
@@ -105,6 +115,7 @@ export const FILTROS_INICIALES: Filtros = {
   hasta: '',
   obrasSociales: [],
   terapeutas: [],
+  areas: [],
   estado: 'todas',
 };
 
@@ -221,11 +232,18 @@ export function analizarFacturas(
   return { facturas, calidad };
 }
 
-export function filtrarFacturas(fs: FacturaAnalizada[], f: Filtros, rango: Rango): FacturaAnalizada[] {
+// Área de cada terapeuta (SIN_AREA si no tiene). Se usa para el filtro y el análisis por área.
+export type AreaPorTerapeuta = Map<string, string>;
+export const areaDe = (mapa: AreaPorTerapeuta | undefined, terapeutaId: string | null) =>
+  (terapeutaId && mapa?.get(terapeutaId)) || SIN_AREA;
+
+export function filtrarFacturas(fs: FacturaAnalizada[], f: Filtros, rango: Rango, areas?: AreaPorTerapeuta): FacturaAnalizada[] {
   const obras = new Set(f.obrasSociales);
   const terapeutas = new Set(f.terapeutas);
+  const areasSel = new Set(f.areas);
   return fs.filter(x =>
     enRango(x.emision, rango)
+    && (areasSel.size === 0 || areasSel.has(areaDe(areas, x.terapeutaId)))
     && (obras.size === 0 || (x.obraSocialId !== null && obras.has(x.obraSocialId)))
     && (terapeutas.size === 0 || (x.terapeutaId !== null && terapeutas.has(x.terapeutaId)))
     && (f.estado === 'todas'
@@ -407,10 +425,13 @@ export function analizarTurnos(filas: TurnoRaw[]): TurnoAnalizado[] {
     });
 }
 
-export function filtrarTurnos(ts: TurnoAnalizado[], f: Filtros, rango: Rango): TurnoAnalizado[] {
+export function filtrarTurnos(ts: TurnoAnalizado[], f: Filtros, rango: Rango, areas?: AreaPorTerapeuta): TurnoAnalizado[] {
   const terapeutas = new Set(f.terapeutas);
+  const areasSel = new Set(f.areas);
   return ts.filter(t =>
-    enRango(t.dia, rango) && (terapeutas.size === 0 || (t.terapeutaId !== null && terapeutas.has(t.terapeutaId))));
+    enRango(t.dia, rango)
+    && (terapeutas.size === 0 || (t.terapeutaId !== null && terapeutas.has(t.terapeutaId)))
+    && (areasSel.size === 0 || areasSel.has(areaDe(areas, t.terapeutaId))));
 }
 
 export const ESTADOS_TURNO = ['pendiente', 'confirmado', 'finalizado', 'cancelado'];

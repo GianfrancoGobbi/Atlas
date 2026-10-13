@@ -11,7 +11,7 @@ import { VistaTerapeutas } from '../components/reportes/VistaTerapeutas';
 import { VistaComparativas } from '../components/reportes/VistaComparativas';
 import { DatosTableros, reportesService } from '../services/reportesService';
 import {
-  analizarFacturas, analizarTurnos, CalidadDatos, FILTROS_INICIALES, FiltroEstado, Filtros, filtrarFacturas, filtrarTurnos,
+  analizarFacturas, analizarTurnos, AreaPorTerapeuta, SIN_AREA, CalidadDatos, FILTROS_INICIALES, FiltroEstado, Filtros, filtrarFacturas, filtrarTurnos,
   alCorte, hoyDia, PRESETS_PERIODO, PresetPeriodo, rangoAnioAnterior, rangoDeFiltros, unAnioAntes,
 } from '../utils/reportes';
 
@@ -53,6 +53,7 @@ function leerFiltros(p: URLSearchParams): Filtros {
     hasta: p.get('hasta') ?? '',
     obrasSociales: lista(p.get('os')),
     terapeutas: lista(p.get('ter')),
+    areas: lista(p.get('area')),
     estado: estado && ESTADOS_VALIDOS.has(estado) ? (estado as FiltroEstado) : FILTROS_INICIALES.estado,
   };
 }
@@ -67,6 +68,7 @@ function aParams(f: Filtros, vista: Vista): URLSearchParams {
   }
   if (f.obrasSociales.length) p.set('os', f.obrasSociales.join(','));
   if (f.terapeutas.length) p.set('ter', f.terapeutas.join(','));
+  if (f.areas.length) p.set('area', f.areas.join(','));
   if (f.estado !== 'todas') p.set('estado', f.estado);
   return p;
 }
@@ -173,21 +175,26 @@ export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, er
   }, [datos, hoy]);
 
   const rango = useMemo(() => rangoDeFiltros(filtros, hoy), [filtros, hoy]);
-  const facturas = useMemo(() => (base ? filtrarFacturas(base.facturas, filtros, rango) : []), [base, filtros, rango]);
-  const turnos = useMemo(() => (base ? filtrarTurnos(base.turnos, filtros, rango) : []), [base, filtros, rango]);
+  // Área de cada terapeuta: el análisis y el filtro por área se deducen del terapeuta.
+  const areaPorTerapeuta = useMemo<AreaPorTerapeuta>(
+    () => new Map((datos?.terapeutas ?? []).filter(p => p.area_id).map(p => [p.id, p.area_id as string])),
+    [datos],
+  );
+  const facturas = useMemo(() => (base ? filtrarFacturas(base.facturas, filtros, rango, areaPorTerapeuta) : []), [base, filtros, rango, areaPorTerapeuta]);
+  const turnos = useMemo(() => (base ? filtrarTurnos(base.turnos, filtros, rango, areaPorTerapeuta) : []), [base, filtros, rango, areaPorTerapeuta]);
   // Mismos filtros pero sin período: para los turnos próximos y las comparativas de mes y año.
   const sinPeriodo = { desde: null, hasta: null };
   // Las comparativas ignoran el estado de pago: comparar solo las pagas o impagas de dos períodos distorsiona todo.
-  const facturasTodas = useMemo(() => (base ? filtrarFacturas(base.facturas, { ...filtros, estado: 'todas' }, sinPeriodo) : []), [base, filtros]);
+  const facturasTodas = useMemo(() => (base ? filtrarFacturas(base.facturas, { ...filtros, estado: 'todas' }, sinPeriodo, areaPorTerapeuta) : []), [base, filtros, areaPorTerapeuta]);
   // El mismo período un año antes, para la variación de los indicadores.
   const rangoAA = useMemo(() => rangoAnioAnterior(rango), [rango]);
   // Vistas como estaban hace un año, para que tengan el mismo tiempo para cobrarse que las actuales.
   const facturasAA = useMemo(
-    () => (base && rangoAA ? alCorte(filtrarFacturas(base.facturas, filtros, rangoAA), unAnioAntes(hoy)) : null),
-    [base, filtros, rangoAA, hoy],
+    () => (base && rangoAA ? alCorte(filtrarFacturas(base.facturas, filtros, rangoAA, areaPorTerapeuta), unAnioAntes(hoy)) : null),
+    [base, filtros, rangoAA, hoy, areaPorTerapeuta],
   );
-  const turnosAA = useMemo(() => (base && rangoAA ? filtrarTurnos(base.turnos, filtros, rangoAA) : null), [base, filtros, rangoAA]);
-  const turnosTodos = useMemo(() => (base ? filtrarTurnos(base.turnos, filtros, { desde: null, hasta: null }) : []), [base, filtros]);
+  const turnosAA = useMemo(() => (base && rangoAA ? filtrarTurnos(base.turnos, filtros, rangoAA, areaPorTerapeuta) : null), [base, filtros, rangoAA, areaPorTerapeuta]);
+  const turnosTodos = useMemo(() => (base ? filtrarTurnos(base.turnos, filtros, { desde: null, hasta: null }, areaPorTerapeuta) : []), [base, filtros, areaPorTerapeuta]);
 
   // Opciones de filtro: solo lo que aparece en los datos que esta persona puede ver.
   const opcionesObras = useMemo(() => {
@@ -204,6 +211,16 @@ export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, er
     const ids = new Set([...base.facturas.map(f => f.terapeutaId), ...base.turnos.map(t => t.terapeutaId)].filter((x): x is string => !!x));
     return [...ids].map(id => ({ id, nombre: nombrePersona(id) })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   }, [base, esAdmin, nombrePersona]);
+
+  // Áreas con actividad visible, más el grupo de terapeutas sin área asignada.
+  const opcionesAreas = useMemo(() => {
+    if (!base) return [];
+    const usadas = new Set([...base.facturas.map(f => f.terapeutaId), ...base.turnos.map(t => t.terapeutaId)]
+      .map(id => (id && areaPorTerapeuta.get(id)) || SIN_AREA));
+    const nombres = new Map((datos?.areas ?? []).map(a => [a.id, a.nombre]));
+    return [...usadas].map(id => ({ id, nombre: id === SIN_AREA ? 'Sin área asignada' : nombres.get(id) ?? 'Área' }))
+      .sort((a, b) => (a.id === SIN_AREA ? 1 : b.id === SIN_AREA ? -1 : a.nombre.localeCompare(b.nombre, 'es')));
+  }, [base, datos, areaPorTerapeuta]);
 
   const actualizarFiltros = (f: Filtros) => setParams(aParams(f, vista), { replace: true });
   const cambiarVista = (v: Vista) => setParams(aParams(filtros, v), { replace: true });
@@ -260,7 +277,7 @@ export const Tableros: React.FC<PropsTableros> = ({ datos, esAdmin, cargando, er
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
-          <BarraFiltros filtros={filtros} onCambio={actualizarFiltros} obrasSociales={opcionesObras} terapeutas={opcionesTerapeutas} />
+          <BarraFiltros filtros={filtros} onCambio={actualizarFiltros} obrasSociales={opcionesObras} terapeutas={opcionesTerapeutas} areas={opcionesAreas} />
           <div className="lg:hidden">{botonActualizar}</div>
         </div>
 

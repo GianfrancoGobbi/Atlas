@@ -8,6 +8,7 @@ interface Props {
   onCambio: (f: Filtros) => void;
   obrasSociales: Opcion[];
   terapeutas?: Opcion[]; // solo administración
+  areas?: Opcion[];
 }
 
 const Check: React.FC<{ visible: boolean }> = ({ visible }) => (
@@ -110,7 +111,7 @@ const ESTADOS: { id: FiltroEstado; etiqueta: string }[] = [
 ];
 
 // Una sola fila de filtros arriba de todo lo que afectan.
-export const BarraFiltros: React.FC<Props> = ({ filtros, onCambio, obrasSociales, terapeutas }) => {
+export const BarraFiltros: React.FC<Props> = ({ filtros, onCambio, obrasSociales, terapeutas, areas }) => {
   const set = (cambios: Partial<Filtros>) => onCambio({ ...filtros, ...cambios });
   const etiquetaPeriodo = filtros.preset === 'personalizado'
     ? `${filtros.desde || '…'} → ${filtros.hasta || '…'}`
@@ -166,6 +167,16 @@ export const BarraFiltros: React.FC<Props> = ({ filtros, onCambio, obrasSociales
         seleccion={filtros.obrasSociales}
         onCambio={ids => set({ obrasSociales: ids })}
       />
+
+      {areas && areas.length > 1 && (
+        <SeleccionMultiple
+          titulo="Área"
+          plural="áreas"
+          opciones={areas}
+          seleccion={filtros.areas}
+          onCambio={ids => set({ areas: ids })}
+        />
+      )}
 
       {terapeutas && terapeutas.length > 1 && (
         <SeleccionMultiple
